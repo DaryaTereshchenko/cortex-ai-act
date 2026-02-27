@@ -1,0 +1,40 @@
+###############################################################################
+# CORTEX-AI-ACT — Codespaces overlay compose
+# Adds a lightweight dev container that shares the network with all services.
+###############################################################################
+
+services:
+  # Dev container (the shell you code in)
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:3.11-bookworm
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    networks:
+      - cortex-net
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
+      KG_SERVICE_URL: http://knowledge-graph:8000
+      RE_SERVICE_URL: http://reasoning-engine:8000
+
+  # Override service volumes for Codespaces (source is at /workspace)
+  knowledge-graph:
+    volumes:
+      - ../services/knowledge-graph:/app
+      - kg_cache:/app/.cache
+
+  reasoning-engine:
+    volumes:
+      - ../services/reasoning-engine:/app
+      - model_cache:/app/.cache
+
+  web-ui:
+    volumes:
+      - ../services/web-ui:/app
+
+  benchmarking:
+    volumes:
+      - ../services/benchmarking:/app
+      - bench_results:/app/results

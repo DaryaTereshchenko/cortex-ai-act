@@ -1,0 +1,60 @@
+// =============================================================================
+// CORTEX-AI-ACT — Dev Container / GitHub Codespaces configuration
+// =============================================================================
+// When a team member opens this repo in Codespaces, the full stack starts
+// automatically. Forwarded ports give each service a public preview URL.
+// =============================================================================
+{
+  "name": "CORTEX AI-Act",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.codespace.yml"],
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+
+  // ── Features (CLI tools installed in the dev container) ─────────────────
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+
+  // ── Port forwarding — each service gets a Codespaces preview URL ────────
+  "forwardPorts": [7474, 7687, 8001, 8002, 8003, 8501],
+  "portsAttributes": {
+    "7474": { "label": "Neo4j Browser",       "onAutoForward": "notify" },
+    "7687": { "label": "Neo4j Bolt",          "onAutoForward": "silent" },
+    "8001": { "label": "Knowledge-Graph API",  "onAutoForward": "notify" },
+    "8002": { "label": "Reasoning-Engine API", "onAutoForward": "notify" },
+    "8003": { "label": "Benchmarking API",     "onAutoForward": "notify" },
+    "8501": { "label": "Web UI (Streamlit)",   "onAutoForward": "openBrowser" }
+  },
+
+  // ── Lifecycle scripts ───────────────────────────────────────────────────
+  "postCreateCommand": "pip install ruff pytest && cp -n .env.example .env 2>/dev/null || true",
+  "postStartCommand": "echo '✅ CORTEX stack is running. Open the Ports tab to access services.'",
+
+  // ── VS Code settings ───────────────────────────────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-azuretools.vscode-docker",
+        "mechatroner.rainbow-csv",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  }
+}

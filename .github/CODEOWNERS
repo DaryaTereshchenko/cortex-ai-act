@@ -1,0 +1,18 @@
+# CORTEX-AI-ACT — Code Owners
+# These owners are automatically requested for review on PRs.
+# Replace placeholder handles with actual GitHub usernames.
+
+# Global fallback
+*                                       @team-cortex
+
+# Per-service ownership
+services/knowledge-graph/               @data-architect
+services/reasoning-engine/              @llm-engineer
+services/web-ui/                        @fullstack-dev
+services/benchmarking/                  @systems-lead
+
+# Infrastructure
+docker-compose.yml                      @systems-lead
+docker/                                 @systems-lead
+.github/                                @systems-lead
+Makefile                                @systems-lead

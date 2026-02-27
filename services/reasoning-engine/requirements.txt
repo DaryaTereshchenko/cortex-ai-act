@@ -1,0 +1,26 @@
+# Reasoning-Engine service dependencies
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+pydantic>=2.0,<3
+
+# LLM & agentic framework
+langgraph>=0.2,<1
+langchain>=0.3,<1
+langchain-community>=0.3,<1
+
+# Model serving (CPU fallback; swap for vllm/text-generation-inference on GPU)
+transformers>=4.48,<5
+accelerate>=1.3,<2
+torch>=2.5
+
+# Knowledge-graph connectivity
+neo4j>=5.26,<6
+
+# Math / entropy calculations
+scipy>=1.15,<2
+numpy>=2.2,<3
+
+# Testing & linting
+pytest>=8,<9
+httpx>=0.28,<1
+ruff>=0.9,<1

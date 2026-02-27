@@ -1,0 +1,13 @@
+# Web-UI service dependencies
+streamlit>=1.41,<2
+httpx>=0.28,<1
+pydantic>=2.0,<3
+
+# Graph visualization
+plotly>=6.0,<7
+streamlit-agraph>=0.0.45,<1
+pyvis>=0.3,<1
+
+# Testing & linting
+pytest>=8,<9
+ruff>=0.9,<1
