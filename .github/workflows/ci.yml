@@ -5,7 +5,8 @@
 # Jobs:
 #   1. lint      — ruff across all services
 #   2. test      — pytest per service (parallel matrix)
-#   3. build     — docker compose build (validates Dockerfiles)
+#   3. build     — Docker images for lightweight services
+#                  (reasoning-engine excluded — too large for free runners)
 #   4. security  — trivy vulnerability scan on built images
 ###############################################################################
 
@@ -89,7 +90,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r services/${{ matrix.service }}/requirements.txt
+          # Use lightweight test deps for reasoning-engine (avoids PyTorch)
+          if [[ -f services/${{ matrix.service }}/requirements-test.txt ]]; then
+            pip install -r services/${{ matrix.service }}/requirements-test.txt
+          else
+            pip install -r services/${{ matrix.service }}/requirements.txt
+          fi
 
       - name: Run pytest
         run: |
@@ -106,7 +112,10 @@ jobs:
           retention-days: 14
 
   # =========================================================================
-  # 3. BUILD — Docker images
+  # 3. BUILD — Docker images (lightweight services only)
+  #    reasoning-engine is excluded: PyTorch makes the image ~4GB+,
+  #    which times out on free GitHub runners. Build it locally or on
+  #    a GPU server instead.
   # =========================================================================
   build:
     name: "Build (${{ matrix.service }})"
@@ -117,7 +126,6 @@ jobs:
       matrix:
         service:
           - knowledge-graph
-          - reasoning-engine
           - web-ui
           - benchmarking
     steps:
@@ -169,7 +177,6 @@ jobs:
       matrix:
         service:
           - knowledge-graph
-          - reasoning-engine
           - web-ui
           - benchmarking
     steps:
