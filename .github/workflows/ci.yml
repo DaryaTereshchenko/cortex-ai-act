@@ -190,13 +190,21 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest"
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.ref_name }}"
           format: "sarif"
           output: "trivy-results-${{ matrix.service }}.sarif"
           severity: "CRITICAL,HIGH"
 
+      - name: Check SARIF file exists
+        id: check_sarif
+        if: always()
+        run: |
+          if [ -f "trivy-results-${{ matrix.service }}.sarif" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && steps.check_sarif.outputs.exists == 'true'
         with:
           sarif_file: "trivy-results-${{ matrix.service }}.sarif"
