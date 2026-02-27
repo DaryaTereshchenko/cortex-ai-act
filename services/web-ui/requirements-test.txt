@@ -1,6 +1,0 @@
-# Lightweight test-only dependencies for CI.
-# Avoids installing plotly, pyvis etc. just to run unit tests.
-streamlit>=1.41,<2
-pytest>=8,<9
-httpx>=0.28,<1
-ruff>=0.9,<1

@@ -84,18 +84,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: services/${{ matrix.service }}/requirements.txt
 
-      - name: Install dependencies
+      - name: Install test dependencies
         run: |
           pip install --upgrade pip
-          # Use lightweight test deps for reasoning-engine (avoids PyTorch)
-          if [[ -f services/${{ matrix.service }}/requirements-test.txt ]]; then
-            pip install -r services/${{ matrix.service }}/requirements-test.txt
-          else
-            pip install -r services/${{ matrix.service }}/requirements.txt
-          fi
+          pip install pytest httpx ruff
+          # Install only the service's core framework (fast, no heavy transitive deps)
+          case "${{ matrix.service }}" in
+            web-ui)       pip install streamlit ;;
+            *)            pip install "fastapi[standard]" ;;
+          esac
 
       - name: Run pytest
         run: |
