@@ -1,123 +1,60 @@
 ###############################################################################
-# CORTEX-AI-ACT  —  Codespaces Preview Environment
+# CORTEX-AI-ACT  —  PR Preview Comment
 ###############################################################################
-# Creates an on-demand preview Codespace for each PR so reviewers can
-# spin up the full stack with one click.
+# Posts a comment on every PR with a one-click link to open the branch
+# in GitHub Codespaces. The devcontainer config auto-starts the full stack.
 #
-# Free-tier: 60 core-hours/month (= 30 hrs on 2-core machine).
-# Auto-deletes after the PR closes to save quota.
+# No Codespace API calls — reviewers launch manually via the link.
+# Free tier: 60 core-hours/month (= ~30 hrs on 2-core machine).
 ###############################################################################
 
 name: Preview Environment
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-  pull_request_target:
-    types: [closed]
+    types: [opened, reopened]
 
 permissions:
   contents: read
   pull-requests: write
 
-env:
-  CODESPACE_NAME: cortex-preview-pr-${{ github.event.pull_request.number }}
-
 jobs:
-  # =========================================================================
-  # Create / update preview on PR open or push
-  # =========================================================================
-  create-preview:
-    name: Create preview environment
-    if: github.event.action != 'closed'
+  post-preview-link:
+    name: Post Codespaces preview link
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for existing Codespace
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISPLAY_NAME: ${{ env.CODESPACE_NAME }}
-        run: |
-          actual=$(gh codespace list --json name,displayName -q \
-            '.[] | select(.displayName == "'"$DISPLAY_NAME"'") | .name' | head -1)
-          if [[ -n "$actual" ]]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "actual_name=$actual" >> "$GITHUB_OUTPUT"
-            echo "Codespace already exists ($actual) — will rebuild."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create Codespace
-        if: steps.check.outputs.exists == 'false'
-        id: create
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISPLAY_NAME: ${{ env.CODESPACE_NAME }}
-        run: |
-          gh codespace create \
-            --repo "${{ github.repository }}" \
-            --branch "${{ github.head_ref }}" \
-            --display-name "$DISPLAY_NAME" \
-            --machine "basicLinux32gb" \
-            --retention-period "72h" \
-            --idle-timeout "30m"
-
-          # Look up the actual name assigned by GitHub
-          actual=$(gh codespace list --json name,displayName -q \
-            '.[] | select(.displayName == "'"$DISPLAY_NAME"'") | .name' | head -1)
-          echo "actual_name=$actual" >> "$GITHUB_OUTPUT"
-
-      - name: Rebuild Codespace (on new push)
-        if: steps.check.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh codespace rebuild --codespace "${{ steps.check.outputs.actual_name }}" || true
-
-      - name: Wait for Codespace
-        id: url
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ACTUAL_NAME="${{ steps.create.outputs.actual_name || steps.check.outputs.actual_name }}"
-          for i in $(seq 1 30); do
-            state=$(gh codespace view --codespace "$ACTUAL_NAME" --json state -q '.state' 2>/dev/null || echo "unknown")
-            echo "Attempt $i: state=$state"
-            if [[ "$state" == "Available" ]]; then
-              break
-            fi
-            sleep 10
-          done
-
       - name: Comment on PR with preview link
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `## 🖥️ Preview Environment
+            const repo = context.repo;
+            const branch = context.payload.pull_request.head.ref;
+            const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
+            const codespaceUrl = `${repoUrl}/codespaces/new?ref=${encodeURIComponent(branch)}&machine=basicLinux32gb`;
 
-            A Codespace preview is available for this PR.
-
-            **[Open in Codespaces](https://github.com/codespaces)**
-
-            Once the Codespace starts, the full CORTEX stack will launch automatically:
-            | Service | Access via Ports tab |
-            |---------|---------------------|
-            | Web UI (Streamlit) | Port 8501 |
-            | Knowledge-Graph API | Port 8001 |
-            | Reasoning-Engine API | Port 8002 |
-            | Benchmarking API | Port 8003 |
-            | Neo4j Browser | Port 7474 |
-
-            > ⏱️ Codespace auto-stops after 30min idle. Auto-deletes 72h after last use.
-            > 💡 Free tier: 60 core-hours/month.`;
+            const body = [
+              `## Preview Environment`,
+              ``,
+              `Click below to launch this branch in a Codespace with the full CORTEX stack:`,
+              ``,
+              `**[Open in Codespaces](${codespaceUrl})**`,
+              ``,
+              `| Service | Port |`,
+              `|---------|------|`,
+              `| Web UI (Streamlit) | 8501 |`,
+              `| Knowledge-Graph API | 8001 |`,
+              `| Reasoning-Engine API | 8002 |`,
+              `| Benchmarking API | 8003 |`,
+              `| Neo4j Browser | 7474 |`,
+              ``,
+              `> The devcontainer config auto-starts all services.`,
+              `> Free tier: 60 core-hours/month.`,
+            ].join('\n');
 
             // Find and update existing comment, or create new one
             const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner: repo.owner,
+              repo: repo.repo,
               issue_number: context.issue.number,
             });
 
@@ -127,61 +64,16 @@ jobs:
 
             if (botComment) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner: repo.owner,
+                repo: repo.repo,
                 comment_id: botComment.id,
                 body,
               });
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner: repo.owner,
+                repo: repo.repo,
                 issue_number: context.issue.number,
                 body,
-              });
-            }
-
-  # =========================================================================
-  # Cleanup preview on PR close / merge
-  # =========================================================================
-  cleanup-preview:
-    name: Cleanup preview environment
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete Codespace
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISPLAY_NAME: ${{ env.CODESPACE_NAME }}
-        run: |
-          # Look up actual name by display name, then delete
-          actual=$(gh codespace list --json name,displayName -q \
-            '.[] | select(.displayName == "'"$DISPLAY_NAME"'") | .name' | head -1)
-          if [[ -n "$actual" ]]; then
-            gh codespace delete --codespace "$actual" --force
-          else
-            echo "Codespace already deleted or not found."
-          fi
-
-      - name: Comment cleanup notice
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('Preview Environment')
-            );
-
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: '## 🖥️ Preview Environment\n\n~~Preview Codespace has been cleaned up~~ (PR closed).',
               });
             }
