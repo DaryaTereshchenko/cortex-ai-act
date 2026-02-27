@@ -180,6 +180,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Lowercase image prefix
+        run: echo "IMAGE_PREFIX=${IMAGE_PREFIX,,}" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
