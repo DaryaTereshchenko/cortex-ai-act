@@ -1,0 +1,8 @@
+2026-03-01 21:01:47 | INFO     | __main__ | Starting EU regulatory document scraper
+2026-03-01 21:01:47 | INFO     | __main__ | Fetching EU AI Act document...
+2026-03-01 21:01:47 | INFO     | __main__ | Fetching URL: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:01:47 | DEBUG    | urllib3.connectionpool | Starting new HTTPS connection (1): eur-lex.europa.eu:443
+2026-03-01 21:01:48 | DEBUG    | urllib3.connectionpool | https://eur-lex.europa.eu:443 "GET /legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 HTTP/1.1" 200 None
+2026-03-01 21:01:48 | DEBUG    | __main__ | Successfully fetched 1264456 bytes from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:01:48 | INFO     | __main__ | Parsed HTML document from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 (10292 elements)
+2026-03-01 21:01:48 | INFO     | __main__ | Successfully scraped AI Act document

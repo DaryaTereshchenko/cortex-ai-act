@@ -1,0 +1,170 @@
+2026-03-01 21:11:41 | INFO     | __main__ | Starting EUR-Lex document extraction
+2026-03-01 21:11:41 | INFO     | __main__ | Fetching EU AI Act from EUR-Lex...
+2026-03-01 21:11:41 | INFO     | downloading | Fetching URL: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:11:41 | DEBUG    | urllib3.connectionpool | Starting new HTTPS connection (1): eur-lex.europa.eu:443
+2026-03-01 21:11:42 | DEBUG    | urllib3.connectionpool | https://eur-lex.europa.eu:443 "GET /legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 HTTP/1.1" 200 None
+2026-03-01 21:11:42 | DEBUG    | downloading | Successfully fetched 1264456 bytes from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:11:42 | INFO     | downloading | Parsed HTML document from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 (10292 elements)
+2026-03-01 21:11:42 | INFO     | __main__ | Extracting document structure...
+2026-03-01 21:11:42 | INFO     | __main__ | Starting document extraction
+2026-03-01 21:11:42 | INFO     | __main__ | Extracted 180 recitals
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 1
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 2
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 3
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 4
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 5
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 6
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 7
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 8
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 9
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 10
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 11
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 12
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 13
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 14
+2026-03-01 21:11:42 | DEBUG    | __main__ | Found article: 15
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 16
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 17
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 18
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 19
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 20
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 21
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 22
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 23
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 24
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 25
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 26
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 27
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 28
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 29
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 30
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 31
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 32
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 33
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 34
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 35
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 36
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 37
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 38
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 39
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 40
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 41
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 42
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 43
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 44
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 45
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 46
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 47
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 48
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 49
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 50
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 51
+2026-03-01 21:11:43 | DEBUG    | __main__ | Found article: 52
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 53
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 54
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 55
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 56
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 57
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 58
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 59
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 60
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 61
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 62
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 63
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 64
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 65
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 66
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 67
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 68
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 69
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 70
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 71
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 72
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 73
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 74
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 75
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 76
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 77
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 78
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 79
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 80
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 81
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 82
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 83
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 84
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 85
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 86
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 87
+2026-03-01 21:11:44 | DEBUG    | __main__ | Found article: 88
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 89
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 90
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 91
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 92
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 93
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 94
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 95
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 96
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 97
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 98
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 99
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 100
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 101
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 102
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 103
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 104
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 105
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 106
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 107
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 108
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 109
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 110
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 111
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 112
+2026-03-01 21:11:45 | DEBUG    | __main__ | Found article: 113
+2026-03-01 21:11:45 | INFO     | __main__ | Extracted 0 chapters, 113 standalone articles
+2026-03-01 21:11:45 | INFO     | __main__ | Extracted 0 annexes
+2026-03-01 21:11:45 | INFO     | __main__ | Collected 52 total cross-references
+2026-03-01 21:11:45 | INFO     | __main__ | Saved extraction to /home/dariast/cortex-ai-act/services/knowledge-graph/data/ai_act_extracted.json
+2026-03-01 21:29:59 | INFO     | __main__ | Starting EUR-Lex document extraction
+2026-03-01 21:29:59 | INFO     | __main__ | Fetching EU AI Act from EUR-Lex...
+2026-03-01 21:29:59 | INFO     | downloading | Fetching URL: https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:29:59 | DEBUG    | urllib3.connectionpool | Starting new HTTPS connection (1): eur-lex.europa.eu:443
+2026-03-01 21:30:00 | DEBUG    | urllib3.connectionpool | https://eur-lex.europa.eu:443 "GET /legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 HTTP/11" 200 None
+2026-03-01 21:30:00 | DEBUG    | downloading | Successfully fetched 1264455 bytes from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689
+2026-03-01 21:30:00 | INFO     | downloading | Parsed HTML document from https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R1689 (10292 elements)
+2026-03-01 21:30:00 | INFO     | __main__ | Extracting document structure...
+2026-03-01 21:30:00 | INFO     | __main__ | Starting document extraction
+2026-03-01 21:30:00 | INFO     | __main__ | Extracted 180 recitals
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: I — GENERAL PROVISIONS
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: II — PROHIBITED AI PRACTICES
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 1 — Classification of AI systems as high-risk
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 2 — Requirements for high-risk AI systems
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 3 — Obligations of providers and deployers of high-risk AI systems and other parties
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 4 — Notifying authorities and notified bodies
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 5 — Standards, conformity assessment, certificates, registration
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: III — HIGH-RISK AI SYSTEMS
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: IV — TRANSPARENCY OBLIGATIONS FOR PROVIDERS AND DEPLOYERS OF CERTAIN AI SYSTEMS
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 1 — Classification rules
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 2 — Obligations for providers of general-purpose AI models
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 3 — Obligations of providers of general-purpose AI models with systemic risk
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 4 — Codes of practice
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: V — GENERAL-PURPOSE AI MODELS
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: VI — MEASURES IN SUPPORT OF INNOVATION
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 1 — Governance at Union level
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 2 — National competent authorities
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: VII — GOVERNANCE
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: VIII — EU DATABASE FOR HIGH-RISK AI SYSTEMS
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 1 — Post-market monitoring
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 2 — Sharing of information on serious incidents
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 3 — Enforcement
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 4 — Remedies
+2026-03-01 21:30:00 | DEBUG    | __main__ |   Found section: 5 — Supervision, investigation, enforcement and monitoring in respect of providers of general-purpose AI models
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: IX — POST-MARKET MONITORING, INFORMATION SHARING AND MARKET SURVEILLANCE
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: X — CODES OF CONDUCT AND GUIDELINES
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: XI — DELEGATION OF POWER AND COMMITTEE PROCEDURE
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: XII — PENALTIES
+2026-03-01 21:30:00 | DEBUG    | __main__ | Found chapter: XIII — FINAL PROVISIONS
+2026-03-01 21:30:00 | INFO     | __main__ | Extracted 13 chapters, 0 standalone articles
+2026-03-01 21:30:00 | INFO     | __main__ | Extracted 13 annexes
+2026-03-01 21:30:00 | INFO     | __main__ | Collected 75 total cross-references
+2026-03-01 21:30:00 | INFO     | __main__ | Saved extraction to /home/dariast/cortex-ai-act/services/knowledge-graph/data/ai_act_extracted.json
