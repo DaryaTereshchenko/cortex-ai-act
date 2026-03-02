@@ -1,7 +1,8 @@
 """
 Scraping module for EU regulatory documents.
 
-Provides utilities for fetching and parsing HTML content from EUR-Lex.
+Provides utilities for fetching and parsing HTML content from EUR-Lex,
+with pluggable parsers for different regulations (AI Act, DSA, etc.).
 """
 
 from .downloading import (
@@ -11,32 +12,46 @@ from .downloading import (
     get_html_content,
     get_urls,
 )
-from .extractor import (
-    Article,
+from .models import (
     Annex,
+    Article,
     Chapter,
     CrossReference,
     Document,
-    EURLexExtractor,
     LinkType,
     Paragraph,
     Recital,
     Section,
     classify_link,
+)
+from .schemas import (
+    AI_ACT_SCHEMA,
+    DSA_SCHEMA,
+    ParsingSchema,
+    SCHEMA_REGISTRY,
+    get_schema,
+)
+from .extractor import BaseDocumentExtractor
+from .parsers import (
+    AIActExtractor,
+    DSAExtractor,
+    EURLexExtractor,  # backward-compat alias
+    create_extractor,
     extract_from_html,
     extract_from_url,
+    register_parser,
 )
 
 __all__ = [
-    # Parser
+    # Downloading
     "ScrapingError",
     "get_ai_act_content",
     "get_dsa_content",
     "get_html_content",
     "get_urls",
-    # Extractor - Data models
-    "Article",
+    # Data models
     "Annex",
+    "Article",
     "Chapter",
     "CrossReference",
     "Document",
@@ -44,9 +59,20 @@ __all__ = [
     "Paragraph",
     "Recital",
     "Section",
-    # Extractor - Functions
-    "EURLexExtractor",
     "classify_link",
+    # Schemas
+    "AI_ACT_SCHEMA",
+    "DSA_SCHEMA",
+    "ParsingSchema",
+    "SCHEMA_REGISTRY",
+    "get_schema",
+    # Extractors
+    "BaseDocumentExtractor",
+    "AIActExtractor",
+    "DSAExtractor",
+    "EURLexExtractor",
+    "create_extractor",
     "extract_from_html",
     "extract_from_url",
+    "register_parser",
 ]
