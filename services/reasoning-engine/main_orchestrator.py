@@ -1,16 +1,16 @@
-from typing import Dict
+
+from critic_engine import self_correction_router
 from engine_schema import GraphState, mock_retrieved_nodes
 from pruning_engine import pruning_node
-from critic_engine import self_correction_router
-import json
+
 
 # --- Updated Pre-Retrieval (The 'Cypher' Simulator) ---
-def pre_retrieval_optimizer(query: str) -> Dict:
+def pre_retrieval_optimizer(query: str) -> dict:
     """
     PRE-RETRIEVAL: Now generates a 'Search Strategy' instead of just a string.
     This tells the KG Lead what logic we want to traverse.
     """
-    print(f"--- PRE-RETRIEVAL: Generating Cypher Logic ---")
+    print("--- PRE-RETRIEVAL: Generating Cypher Logic ---")
     return {
         "original_query": query,
         "cypher_intent": "MATCH (a:Article)-[:USES_TERM]->(d:Definition) WHERE a.full_text CONTAINS 'high-risk' RETURN a, d",
@@ -30,7 +30,7 @@ def critic_node(state: GraphState) -> GraphState:
     """
     print(f"--- CRITIC: Structural Audit (Hop {state['hops']}) ---")
     context_ids = [n["id"] for n in state["retrieved_nodes"]]
-    
+
     # Check 1: Article-to-Recital Interpretive Gap
     # If we have Art 6, we MUST have Recital 53 to understand 'intent'
     if "ai_act_art_6" in context_ids and "ai_act_rec_53" not in context_ids:
@@ -46,7 +46,7 @@ def critic_node(state: GraphState) -> GraphState:
 def run_cortex_engine(user_query: str):
     # 1. PRE-RETRIEVAL Optimization
     search_strategy = pre_retrieval_optimizer(user_query)
-    
+
     state: GraphState = {
         "query": user_query,
         "cypher_intent": search_strategy,
@@ -72,7 +72,7 @@ def run_cortex_engine(user_query: str):
         state = critic_node(state)
 
         next_step = self_correction_router(state)
-        
+
         if next_step == "generate_final_answer":
             break
         else:
@@ -88,7 +88,7 @@ def run_cortex_engine(user_query: str):
             })
 
     # 5. FINAL SYNTHESIS
-    state["final_answer"] = f"Final answer based on Article 6 and its interpretive Recital 53..."
+    state["final_answer"] = "Final answer based on Article 6 and its interpretive Recital 53..."
 
     # --- API CONTRACT OUTPUT ---
     initial_count = len(state["retrieved_nodes"])

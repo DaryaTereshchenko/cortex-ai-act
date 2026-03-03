@@ -1,4 +1,5 @@
-from typing import List, TypedDict, Optional, Dict
+from typing import TypedDict
+
 
 # Matches the KG Lead's Node Properties (Regulation, Chapter, Article, etc.)
 class LegalNode(TypedDict):
@@ -6,15 +7,15 @@ class LegalNode(TypedDict):
     node_type: str         # "Article", "Recital", "Definition", "TextChunk"
     content: str           # The 'full_text' or 'definition_text'
     regulation: str        # "eu_ai_act" or "dsa"
-    metadata: Dict         # {"chapter": "III", "section": "1", "url": "..."}
-    entropy_score: Optional[float] 
+    metadata: dict         # {"chapter": "III", "section": "1", "url": "..."}
+    entropy_score: float | None
 
 class GraphState(TypedDict):
     query: str                   # User's natural language question
-    cypher_intent: Dict          # The 'Search Strategy' for the Graph Lead
-    retrieved_nodes: List[LegalNode] 
-    links_found: List[Dict]      # Relationships like :INTERPRETS or :OVERLAPS_WITH
-    pruned_context: List[LegalNode]
+    cypher_intent: dict          # The 'Search Strategy' for the Graph Lead
+    retrieved_nodes: list[LegalNode]
+    links_found: list[dict]      # Relationships like :INTERPRETS or :OVERLAPS_WITH
+    pruned_context: list[LegalNode]
     final_answer: str
     hops: int
     is_accurate: bool

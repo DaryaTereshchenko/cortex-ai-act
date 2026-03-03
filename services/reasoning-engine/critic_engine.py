@@ -8,15 +8,15 @@ def critic_node(state: GraphState) -> GraphState:
     Innovation 2: Structural Audit based on the KG Hierarchy.
     """
     print(f"--- CRITIC: Structural Audit (Hop {state['hops']}) ---")
-    
+
     # 1. Gather all IDs in the current pruned context
     context_ids = [node["id"] for node in state["pruned_context"]]
-    
+
     # 2. Join text for keyword-based backup check
     context_text = " ".join([node["content"] for node in state["pruned_context"]])
-    
+
     missing_dependencies = []
-    
+
     # RULE A: Hierarchical Link (From KG Plan Phase 4.2)
     # If Article 6 is present, the Critic checks for its interpretive Recital 53
     if "ai_act_art_6" in context_ids and "ai_act_rec_53" not in context_ids:
@@ -38,7 +38,7 @@ def critic_node(state: GraphState) -> GraphState:
         else:
             print("Critic satisfied: Legal hierarchy is complete.")
         state["is_accurate"] = True
-        
+
     return state
 
 def self_correction_router(state: GraphState):
