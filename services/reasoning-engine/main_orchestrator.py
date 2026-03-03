@@ -1,4 +1,3 @@
-
 from critic_engine import self_correction_router
 from engine_schema import GraphState, mock_retrieved_nodes
 from pruning_engine import pruning_node
@@ -14,13 +13,15 @@ def pre_retrieval_optimizer(query: str) -> dict:
     return {
         "original_query": query,
         "cypher_intent": "MATCH (a:Article)-[:USES_TERM]->(d:Definition) WHERE a.full_text CONTAINS 'high-risk' RETURN a, d",
-        "depth": 2
+        "depth": 2,
     }
+
 
 # --- Updated Post-Retrieval Reranker ---
 def post_retrieval_reranker(nodes: list) -> list:
     print(f"--- POST-RETRIEVAL: Re-ranking {len(nodes)} nodes ---")
     return sorted(nodes, key=lambda x: x.get("entropy_score", 0))
+
 
 # --- Updated Critic (The 'Structural' Audit) ---
 def critic_node(state: GraphState) -> GraphState:
@@ -41,7 +42,9 @@ def critic_node(state: GraphState) -> GraphState:
         state["is_accurate"] = True
     return state
 
+
 # --- FINALIZED REASONING ENGINE ---
+
 
 def run_cortex_engine(user_query: str):
     # 1. PRE-RETRIEVAL Optimization
@@ -55,7 +58,7 @@ def run_cortex_engine(user_query: str):
         "pruned_context": [],
         "final_answer": "",
         "hops": 0,
-        "is_accurate": False
+        "is_accurate": False,
     }
 
     print(f"🚀 CORTEX-RAG v2: Processing '{user_query}'")
@@ -78,14 +81,16 @@ def run_cortex_engine(user_query: str):
         else:
             print("🔄 Re-traversing Graph for missing hierarchy...")
             # Simulate KG Lead's :INTERPRETS relationship
-            state["retrieved_nodes"].append({
-                "id": "ai_act_rec_53",
-                "node_type": "Recital",
-                "content": "Recital 53: Explains legislative intent for high-risk rules...",
-                "regulation": "eu_ai_act",
-                "metadata": {"interprets": "ai_act_art_6"},
-                "entropy_score": None
-            })
+            state["retrieved_nodes"].append(
+                {
+                    "id": "ai_act_rec_53",
+                    "node_type": "Recital",
+                    "content": "Recital 53: Explains legislative intent for high-risk rules...",
+                    "regulation": "eu_ai_act",
+                    "metadata": {"interprets": "ai_act_art_6"},
+                    "entropy_score": None,
+                }
+            )
 
     # 5. FINAL SYNTHESIS
     state["final_answer"] = "Final answer based on Article 6 and its interpretive Recital 53..."
@@ -101,12 +106,17 @@ def run_cortex_engine(user_query: str):
         "metrics": {
             "total_hops": state["hops"],
             "entropy_pruning_pct": f"{reduction_pct:.2f}%",
-            "cross_regulatory_active": any(n["regulation"] == "dsa" for n in state["pruned_context"])
-        }
+            "cross_regulatory_active": any(
+                n["regulation"] == "dsa" for n in state["pruned_context"]
+            ),
+        },
     }
 
-    print(f"✅ ENGINE FINISHED. Sustainability: {api_output['metrics']['entropy_pruning_pct']} saved.")
+    print(
+        f"✅ ENGINE FINISHED. Sustainability: {api_output['metrics']['entropy_pruning_pct']} saved."
+    )
     return api_output
+
 
 if __name__ == "__main__":
     run_cortex_engine("What are the rules for high-risk systems?")

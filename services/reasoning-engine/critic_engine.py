@@ -2,6 +2,7 @@ from engine_schema import GraphState
 
 # --- INNOVATION 2: AGENTIC SELF-CORRECTION (THE CRITIC) ---
 
+
 def critic_node(state: GraphState) -> GraphState:
     """
     The 'Critic' Node that checks for legal completeness.
@@ -40,6 +41,7 @@ def critic_node(state: GraphState) -> GraphState:
         state["is_accurate"] = True
 
     return state
+
 
 def self_correction_router(state: GraphState):
     """
