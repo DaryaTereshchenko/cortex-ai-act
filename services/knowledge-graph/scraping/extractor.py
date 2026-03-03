@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 
@@ -702,8 +702,9 @@ if __name__ == "__main__":
     if str(_service_root) not in sys.path:
         sys.path.insert(0, str(_service_root))
 
-    from logging_config import configure_logging
     from downloading import get_ai_act_content, get_urls
+
+    from logging_config import configure_logging
 
     configure_logging(level=logging.DEBUG, log_file="extractor.log")
     logger.info("Starting EUR-Lex document extraction")

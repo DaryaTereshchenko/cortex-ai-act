@@ -12,8 +12,8 @@ from .downloading import (
     get_urls,
 )
 from .extractor import (
-    Article,
     Annex,
+    Article,
     Chapter,
     CrossReference,
     Document,
