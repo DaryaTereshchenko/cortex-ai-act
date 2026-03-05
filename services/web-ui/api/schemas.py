@@ -20,8 +20,19 @@ class QueryRequest(BaseModel):
     enable_self_correction: bool = Field(default=True, description="Enable agentic self-correction")
 
 
+class LegalNode(BaseModel):
+    """Legal document node from knowledge graph (matches KG service schema)."""
+
+    id: str = Field(..., description="Unique node identifier (e.g., 'ai_act_art_6')")
+    node_type: str = Field(..., description="Node type: Article, Recital, Definition, TextChunk")
+    content: str = Field(..., description="Full text of the legal article/definition")
+    regulation: str = Field(..., description="Source regulation: eu_ai_act or dsa")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (chapter, section, url)")
+    entropy_score: Optional[float] = Field(default=None, description="Semantic entropy score")
+
+
 class GraphNode(BaseModel):
-    """Node in the reasoning graph."""
+    """Node in the reasoning graph (for visualization)."""
 
     id: str = Field(..., description="Unique node identifier")
     label: str = Field(..., description="Display label (e.g., 'Article 6')")

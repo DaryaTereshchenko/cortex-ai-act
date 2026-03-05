@@ -15,6 +15,7 @@ from .schemas import (
     GraphEdge,
     GraphNode,
     HealthResponse,
+    LegalNode,
     QueryRequest,
     QueryResponse,
     ReasoningStep,
@@ -106,21 +107,77 @@ async def submit_query(request: QueryRequest) -> dict:
 async def process_query(query_id: str, request: QueryRequest) -> None:
     """Process query by forwarding to reasoning engine."""
     try:
-        # Mock response for development
-        # Replace this with real reasoning engine call when available
-        await asyncio.sleep(2)  # Simulate processing
+        # Simulate processing time
+        await asyncio.sleep(2)
 
+        # Mock legal nodes from knowledge-graph (matches KG service schema)
+        mock_legal_nodes = [
+            {
+                "id": "ai_act_art_6",
+                "node_type": "Article",
+                "content": "Article 6 - Classification rules for high-risk AI systems. Providers shall draw up documentation before placing high-risk AI systems on the market...",
+                "regulation": "eu_ai_act",
+                "metadata": {"chapter": "III", "section": "1", "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj#art6"},
+                "entropy_score": 0.92,
+            },
+            {
+                "id": "ai_act_rec_47",
+                "node_type": "Recital",
+                "content": "Recital 47 - High-risk AI systems should be designed in a way that ensures human oversight and control...",
+                "regulation": "eu_ai_act",
+                "metadata": {"interprets": "ai_act_art_6", "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj#rec47"},
+                "entropy_score": 0.85,
+            },
+            {
+                "id": "ai_act_def_3",
+                "node_type": "Definition",
+                "content": "AI system: a machine-based system designed to operate with some degree of autonomy...",
+                "regulation": "eu_ai_act",
+                "metadata": {"source": "Article 3"},
+                "entropy_score": 0.78,
+            },
+            {
+                "id": "dsa_art_24",
+                "node_type": "Article",
+                "content": "Article 24 - Systemic risks shall refer to risks that may have systemic implications...",
+                "regulation": "dsa",
+                "metadata": {"chapter": "IV", "section": "2"},
+                "entropy_score": 0.65,
+            },
+        ]
+
+        # Simulate reasoning engine output (matches reasoning-engine schema)
         result = {
-            "final_answer": f"Based on the EU AI Act and {request.regulation}, here's the answer...",
+            "final_answer": (
+                "Based on Article 6 of the EU AI Act and Article 24 of the DSA, "
+                "high-risk AI systems require classification documentation and systemic risk assessment. "
+                "The system must maintain human oversight per Recital 47."
+            ),
             "reasoning_steps": [
                 {
                     "step_number": 1,
                     "agent": "Retriever",
-                    "action": "Retrieved relevant articles",
-                    "retrieved_nodes": ["ai_act_art_6", "ai_act_rec_47"],
-                    "entropy_reduction": 0.15,
+                    "action": "Searched knowledge graph for 'high-risk AI classification'",
+                    "retrieved_nodes": ["ai_act_art_6", "ai_act_rec_47", "ai_act_def_3"],
+                    "entropy_reduction": 0.18,
                     "timestamp": datetime.now().isoformat(),
-                }
+                },
+                {
+                    "step_number": 2,
+                    "agent": "Critic",
+                    "action": "Validated hierarchy - checked for interpretive gaps",
+                    "retrieved_nodes": ["ai_act_rec_47"],
+                    "entropy_reduction": 0.08,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                {
+                    "step_number": 3,
+                    "agent": "Synthesizer",
+                    "action": "Generated final answer with citations",
+                    "retrieved_nodes": ["ai_act_art_6", "ai_act_rec_47", "dsa_art_24"],
+                    "entropy_reduction": 0.12,
+                    "timestamp": datetime.now().isoformat(),
+                },
             ],
             "graph_data": {
                 "nodes": [
@@ -128,20 +185,72 @@ async def process_query(query_id: str, request: QueryRequest) -> None:
                         "id": "ai_act_art_6",
                         "label": "Article 6",
                         "node_type": "Article",
-                        "text_preview": "Classification rules...",
-                        "entropy_score": 0.8,
+                        "text_preview": "Classification rules for high-risk AI systems. Providers shall draw up documentation...",
+                        "entropy_score": 0.92,
                         "pruned": False,
                         "regulation": "eu_ai_act",
-                    }
+                    },
+                    {
+                        "id": "ai_act_rec_47",
+                        "label": "Recital 47",
+                        "node_type": "Recital",
+                        "text_preview": "High-risk AI systems should be designed in a way that ensures human oversight...",
+                        "entropy_score": 0.85,
+                        "pruned": False,
+                        "regulation": "eu_ai_act",
+                    },
+                    {
+                        "id": "ai_act_def_3",
+                        "label": "Definition (Art. 3)",
+                        "node_type": "Definition",
+                        "text_preview": "AI system: a machine-based system designed to operate with some degree...",
+                        "entropy_score": 0.78,
+                        "pruned": False,
+                        "regulation": "eu_ai_act",
+                    },
+                    {
+                        "id": "dsa_art_24",
+                        "label": "Article 24 (DSA)",
+                        "node_type": "Article",
+                        "text_preview": "Systemic risks shall refer to risks that may have systemic implications...",
+                        "entropy_score": 0.65,
+                        "pruned": False,
+                        "regulation": "dsa",
+                    },
                 ],
-                "edges": [],
+                "edges": [
+                    {
+                        "source": "ai_act_art_6",
+                        "target": "ai_act_rec_47",
+                        "relationship": ":INTERPRETS",
+                        "strength": 0.95,
+                    },
+                    {
+                        "source": "ai_act_art_6",
+                        "target": "ai_act_def_3",
+                        "relationship": ":USES_TERM",
+                        "strength": 0.88,
+                    },
+                    {
+                        "source": "ai_act_art_6",
+                        "target": "dsa_art_24",
+                        "relationship": ":OVERLAPS_WITH",
+                        "strength": 0.72,
+                    },
+                ],
             },
-            "citations": ["Article 6 - Classification rules"],
+            "citations": [
+                "Article 6 (EU AI Act) - Classification rules for high-risk AI systems",
+                "Recital 47 (EU AI Act) - Human oversight requirement",
+                "Article 24 (DSA) - Systemic risks for VLOPs",
+            ],
             "metrics": {
-                "reasoning_steps": 1,
-                "entropy_reduction": 0.15,
-                "tokens_saved": 450,
+                "reasoning_steps": 3,
+                "entropy_reduction_percent": 38,  # (0.18 + 0.08 + 0.12) * 100
+                "tokens_saved": 1240,
                 "latency_seconds": 2.0,
+                "nodes_pruned": 0,
+                "nodes_retrieved": 4,
             },
         }
 
