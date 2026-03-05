@@ -27,37 +27,40 @@ st.markdown(
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #1E3A8A;
+        color: #3B82F6;
         text-align: center;
         padding: 1rem 0;
     }
     .sub-header {
         font-size: 1rem;
-        color: #64748B;
+        color: #9CA3AF;
         text-align: center;
         margin-bottom: 2rem;
     }
     .metric-container {
-        background-color: #F1F5F9;
+        background-color: rgba(59, 130, 246, 0.1);
         padding: 1rem;
         border-radius: 0.5rem;
         margin: 0.5rem 0;
+        border: 1px solid rgba(59, 130, 246, 0.2);
     }
     .answer-box {
-        background-color: #EFF6FF;
+        background-color: rgba(59, 130, 246, 0.1);
         border-left: 4px solid #3B82F6;
         padding: 1rem;
         border-radius: 0.5rem;
         margin: 1rem 0;
+        color: inherit;
     }
     .citation-box {
-        background-color: #FEF3C7;
+        background-color: rgba(245, 158, 11, 0.1);
         border-left: 4px solid #F59E0B;
         padding: 0.75rem;
         margin: 0.5rem 0;
         border-radius: 0.25rem;
         font-family: monospace;
         font-size: 0.85rem;
+        color: inherit;
     }
     </style>
     """,
