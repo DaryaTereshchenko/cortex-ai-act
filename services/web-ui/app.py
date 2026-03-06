@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime
 
 import requests
 import streamlit as st
@@ -138,7 +137,7 @@ with st.sidebar:
         st.error("❌ API Unreachable")
 
 # Main tabs
-query_tab, browse_tab, history_tab, about_tab = st.tabs(["🔍 Query", "📖 Browse", "📜 History", "ℹ️ About"])
+query_tab, browse_tab, history_tab, about_tab = st.tabs(["🔍 Query", "📖 Browse", "📜 History", "i About"])
 
 with query_tab:
     st.subheader("Ask a Regulatory Compliance Question")
@@ -286,7 +285,7 @@ with query_tab:
                     st.error(f"API Error: {submit_response.status_code}")
 
             except Exception as e:
-                st.error(f"Request failed: {str(e)}")
+                st.error(f"Request failed: {e!s}")
 
 with browse_tab:
     st.subheader("📖 Browse Regulations")
@@ -383,7 +382,7 @@ with browse_tab:
                 st.error("Failed to load annexes")
 
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Error: {e!s}")
 
 with history_tab:
     st.subheader("Query History")
@@ -391,8 +390,8 @@ with history_tab:
     if not st.session_state.query_history:
         st.info("No queries yet. Submit a question in the Query tab!")
     else:
-        for idx, query in enumerate(st.session_state.query_history):
-            with st.expander(f"🕐 {query['question'][:70]}..."):
+        for _idx, query in enumerate(st.session_state.query_history):
+            with st.expander(f"🕐 {query['question'][:70]:s}..."):
                 st.write(f"**Status:** {query['status']}")
                 st.write(f"**Time:** {query.get('timestamp', 'N/A')}")
                 if query.get("final_answer"):

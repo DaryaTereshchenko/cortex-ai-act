@@ -408,7 +408,7 @@ async def list_regulations() -> list[dict]:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to fetch regulations: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch regulations: {e!s}") from e
 
 
 @app.get("/api/article/{regulation}/{number}")
@@ -422,10 +422,10 @@ async def get_article(regulation: str, number: int) -> dict:
         return response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Article {number} not found in {regulation}")
-        raise HTTPException(status_code=503, detail="Knowledge graph service error")
+            raise HTTPException(status_code=404, detail=f"Article {number} not found in {regulation}") from e
+        raise HTTPException(status_code=503, detail="Knowledge graph service error") from e
     except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=f"{e!s}") from e
 
 
 @app.get("/api/chapter/{regulation}/{number}")
@@ -439,10 +439,10 @@ async def get_chapter(regulation: str, number: str) -> dict:
         return response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Chapter {number} not found in {regulation}")
-        raise HTTPException(status_code=503, detail="Knowledge graph service error")
+            raise HTTPException(status_code=404, detail=f"Chapter {number} not found in {regulation}") from e
+        raise HTTPException(status_code=503, detail="Knowledge graph service error") from e
     except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=f"{e!s}") from e
 
 
 @app.get("/api/recitals/{regulation}")
@@ -456,7 +456,7 @@ async def list_recitals(regulation: str, skip: int = 0, limit: int = 20) -> list
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to fetch recitals: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch recitals: {e!s}") from e
 
 
 @app.get("/api/annexes/{regulation}")
@@ -469,7 +469,7 @@ async def list_annexes(regulation: str) -> list[dict]:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to fetch annexes: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch annexes: {e!s}") from e
 
 
 @app.get("/api/definitions/{regulation}")
@@ -482,7 +482,7 @@ async def list_definitions(regulation: str) -> list[dict]:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to fetch definitions: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch definitions: {e!s}") from e
 
 
 @app.get("/api/stats")
@@ -493,7 +493,7 @@ async def get_graph_stats() -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to fetch stats: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch stats: {e!s}") from e
 
 
 @app.post("/api/cypher")
@@ -510,7 +510,7 @@ async def execute_cypher(query_payload: dict[str, Any]) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Cypher execution failed: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Cypher execution failed: {e!s}") from e
 
 
 @app.post("/api/ingest")
@@ -527,7 +527,7 @@ async def ingest_data(ingest_payload: dict[str, Any]) -> dict:
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Ingest failed: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Ingest failed: {e!s}") from e
 
 
 @app.websocket("/ws/{query_id}")
