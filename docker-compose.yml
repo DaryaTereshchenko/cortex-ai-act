@@ -137,8 +137,8 @@ services:
       - "${API_PORT:-8000}:8000"   # FastAPI
     environment:
       <<: *common-env
-      REASONING_ENGINE_URL: http://reasoning-engine:8001
-      KNOWLEDGE_GRAPH_URL: http://knowledge-graph:8002
+      REASONING_ENGINE_URL: http://reasoning-engine:8000
+      KNOWLEDGE_GRAPH_URL: http://knowledge-graph:8000
     depends_on:
       - knowledge-graph
       - reasoning-engine
