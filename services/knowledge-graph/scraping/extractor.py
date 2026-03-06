@@ -142,9 +142,7 @@ class BaseDocumentExtractor:
 
             for p in container.select("p"):
                 text_parts.append(p.get_text(strip=True))
-                links.extend(
-                    self._extract_links(p, "recital", f"rec_{num_str}")
-                )
+                links.extend(self._extract_links(p, "recital", f"rec_{num_str}"))
 
             if text_parts:
                 recitals.append(
@@ -200,9 +198,7 @@ class BaseDocumentExtractor:
 
             # --- Chapter ---
             if self._is_chapter_heading(elem, text):
-                current_chapter = self._parse_chapter_heading(
-                    elem, text, len(chapters)
-                )
+                current_chapter = self._parse_chapter_heading(elem, text, len(chapters))
                 chapters.append(current_chapter)
                 current_section = None
                 self._current_chapter = current_chapter.number
@@ -213,9 +209,7 @@ class BaseDocumentExtractor:
                 current_section = self._parse_section_heading(
                     elem,
                     text,
-                    len(
-                        current_chapter.sections if current_chapter else []
-                    ),
+                    len(current_chapter.sections if current_chapter else []),
                 )
                 if current_chapter:
                     current_chapter.sections.append(current_section)
@@ -243,59 +237,34 @@ class BaseDocumentExtractor:
     # Heading detection helpers (override for alternative structures) --------
 
     def _is_chapter_heading(self, elem: Tag, text: str) -> bool:
-        cls_token = (
-            self.schema.chapter_selector.split(",")[0].strip().lstrip("p.")
-        )
+        cls_token = self.schema.chapter_selector.split(",")[0].strip().lstrip("p.")
         return (
             cls_token in elem.get("class", [])
             and self.schema.chapter_keyword.upper() in text.upper()
         )
 
     def _is_section_heading(self, elem: Tag) -> bool:
-        cls_token = (
-            self.schema.section_selector.split(",")[0].strip().lstrip("p.")
-        )
+        cls_token = self.schema.section_selector.split(",")[0].strip().lstrip("p.")
         return cls_token in elem.get("class", [])
 
     def _is_article_element(self, elem: Tag) -> bool:
-        cls_token = (
-            self.schema.article_title_selector.split(",")[0]
-            .strip()
-            .lstrip("p.")
-        )
-        return (
-            cls_token in elem.get("class", [])
-            or elem.get("id", "").startswith("art")
-        )
+        cls_token = self.schema.article_title_selector.split(",")[0].strip().lstrip("p.")
+        return cls_token in elem.get("class", []) or elem.get("id", "").startswith("art")
 
     # Heading parsers -------------------------------------------------------
 
-    def _parse_chapter_heading(
-        self, elem: Tag, text: str, index: int
-    ) -> Chapter:
-        chapter_match = re.search(
-            self.schema.chapter_number_pattern, text, re.I
-        )
-        title_match = re.search(
-            self.schema.chapter_title_pattern, text, re.I
-        )
+    def _parse_chapter_heading(self, elem: Tag, text: str, index: int) -> Chapter:
+        chapter_match = re.search(self.schema.chapter_number_pattern, text, re.I)
+        title_match = re.search(self.schema.chapter_title_pattern, text, re.I)
         return Chapter(
-            number=(
-                chapter_match.group(1) if chapter_match else str(index + 1)
-            ),
+            number=(chapter_match.group(1) if chapter_match else str(index + 1)),
             title=title_match.group(1).strip() if title_match else text,
         )
 
-    def _parse_section_heading(
-        self, elem: Tag, text: str, index: int
-    ) -> Section:
-        section_match = re.search(
-            self.schema.section_number_pattern, text, re.I
-        )
+    def _parse_section_heading(self, elem: Tag, text: str, index: int) -> Section:
+        section_match = re.search(self.schema.section_number_pattern, text, re.I)
         return Section(
-            number=(
-                section_match.group(1) if section_match else str(index + 1)
-            ),
+            number=(section_match.group(1) if section_match else str(index + 1)),
             title=text,
         )
 
@@ -306,14 +275,10 @@ class BaseDocumentExtractor:
     def _parse_article(self, elem: Tag) -> Article | None:
         """Parse a single article element."""
         text = elem.get_text(strip=True)
-        article_match = re.search(
-            self.schema.article_number_pattern, text, re.I
-        )
+        article_match = re.search(self.schema.article_number_pattern, text, re.I)
         if not article_match:
             article_id = elem.get("id", "")
-            id_match = re.search(
-                self.schema.article_id_pattern, article_id, re.I
-            )
+            id_match = re.search(self.schema.article_id_pattern, article_id, re.I)
             if id_match:
                 article_num = id_match.group(1)
             else:
@@ -341,14 +306,10 @@ class BaseDocumentExtractor:
             title = subtitle_elem.get_text(strip=True)
 
         article = Article(number=article_num, title=title)
-        article.paragraphs = self._extract_article_paragraphs(
-            elem, article_num
-        )
+        article.paragraphs = self._extract_article_paragraphs(elem, article_num)
         return article
 
-    def _extract_article_paragraphs(
-        self, article_elem: Tag, article_num: str
-    ) -> list[Paragraph]:
+    def _extract_article_paragraphs(self, article_elem: Tag, article_num: str) -> list[Paragraph]:
         """Extract paragraphs from an article element.
 
         EUR-Lex uses two structures for sub-points:
@@ -363,9 +324,7 @@ class BaseDocumentExtractor:
         paragraphs: list[Paragraph] = []
         source_id = f"art_{article_num}"
 
-        container = article_elem.find_parent(
-            "div", class_="eli-subdivision"
-        )
+        container = article_elem.find_parent("div", class_="eli-subdivision")
         if not container:
             return paragraphs
 
@@ -406,9 +365,7 @@ class BaseDocumentExtractor:
                 num_str = f"{current_para_num}({inline_point_match.group(1)})"
             else:
                 content = text
-                num_str = (
-                    str(current_para_num) if current_para_num else "intro"
-                )
+                num_str = str(current_para_num) if current_para_num else "intro"
 
             # Check if this paragraph is inside a table (content cell)
             # If so, skip it here — it will be handled in table processing
@@ -424,9 +381,7 @@ class BaseDocumentExtractor:
                             continue  # Skip, will be handled in table pass
 
             links = self._extract_links(p_elem, "article", source_id)
-            paragraphs.append(
-                Paragraph(number=num_str, text=content, links=links)
-            )
+            paragraphs.append(Paragraph(number=num_str, text=content, links=links))
 
         # Second pass: process tables for point lists
         # Only process top-level tables (not nested inside other tables)
@@ -436,27 +391,27 @@ class BaseDocumentExtractor:
         for table in all_tables:
             for inner_table in table.find_all("table"):
                 nested_table_ids.add(id(inner_table))
-        
+
         top_level_tables = [t for t in all_tables if id(t) not in nested_table_ids]
-        
+
         # Pattern for numeric point markers like (1), (2), (45)
         numeric_point_pattern = re.compile(r"^\((\d+)\)$")
         # Pattern for letter point markers like (a), (b), (i), (ii)
         letter_point_pattern = re.compile(r"^\([a-z]+\)$|^\([ivx]+\)$")
-        
+
         current_para_num = 0
         for table in top_level_tables:
             rows = table.find_all("tr")
             if not rows:
                 continue
-            
+
             # Check first row to determine table type
             first_cells = rows[0].find_all("td")
             if len(first_cells) < 2:
                 continue
-                
+
             first_marker = first_cells[0].get_text(strip=True)
-            
+
             # Determine current_para_num for this table by looking at preceding paragraph
             prev_para = table.find_previous_sibling(
                 lambda t: isinstance(t, Tag) and t.name in ("p", "div")
@@ -466,14 +421,17 @@ class BaseDocumentExtractor:
                 prev_match = para_pattern.match(prev_text)
                 if prev_match:
                     current_para_num = int(prev_match.group(1))
-            
-            # Skip tables that start with a letter marker ONLY when there's no
-            # parent paragraph context (current_para_num == 0).
-            # These are duplicates of sub-points already embedded in definitions.
-            # When current_para_num > 0, letter tables are legitimate sub-points.
+
+            # Skip letter-marked tables at the top level ONLY when numbered
+            # paragraphs have already been collected (meaning these tables are
+            # duplicates of inline content).  When no numbered paragraphs exist
+            # (e.g. DSA Article 3 Definitions), the letter tables ARE the
+            # primary content and must be processed.
             if letter_point_pattern.match(first_marker) and current_para_num == 0:
-                continue
-            
+                has_numbered = any(re.match(r"^\d+$", p.number) for p in paragraphs)
+                if has_numbered:
+                    continue
+
             # Check if first row has a numeric marker with nested content
             # (e.g., definition with embedded sub-points)
             first_row_has_nested_def = False
@@ -481,13 +439,13 @@ class BaseDocumentExtractor:
                 # Check if content cell has nested tables (sub-points)
                 has_nested = len(first_cells[1].find_all("table")) > 0
                 first_row_has_nested_def = has_nested
-            
+
             for row_idx, row in enumerate(rows):
                 # If first row has nested definition, skip subsequent rows
                 # (sub-points are already captured in first row's get_text())
                 if first_row_has_nested_def and row_idx > 0:
                     continue
-                    
+
                 cells = row.find_all("td")
                 if len(cells) >= 2:
                     marker_text = cells[0].get_text(strip=True)
@@ -497,9 +455,7 @@ class BaseDocumentExtractor:
                     if marker_match and content_text:
                         num_str = f"{current_para_num}({marker_match.group(1)})"
                         links = self._extract_links(cells[1], "article", source_id)
-                        paragraphs.append(
-                            Paragraph(number=num_str, text=content_text, links=links)
-                        )
+                        paragraphs.append(Paragraph(number=num_str, text=content_text, links=links))
 
         # Sort paragraphs by number to maintain proper order
         def sort_key(p):
@@ -529,33 +485,19 @@ class BaseDocumentExtractor:
         """Extract annexes from the document."""
         annexes: list[Annex] = []
 
-        for container in self.soup.select(
-            self.schema.annex_container_selector
-        ):
+        for container in self.soup.select(self.schema.annex_container_selector):
             annex_id = container.get("id", "")
-            number_match = re.search(
-                self.schema.annex_id_pattern, annex_id, re.I
-            )
-            number = (
-                number_match.group(1)
-                if number_match
-                else str(len(annexes) + 1)
-            )
+            number_match = re.search(self.schema.annex_id_pattern, annex_id, re.I)
+            number = number_match.group(1) if number_match else str(len(annexes) + 1)
 
             title_elem = container.select_one(self.schema.annex_title_selector)
-            title = (
-                title_elem.get_text(strip=True)
-                if title_elem
-                else f"Annex {number}"
-            )
+            title = title_elem.get_text(strip=True) if title_elem else f"Annex {number}"
 
             content_parts: list[str] = []
             links: list[CrossReference] = []
             for p in container.select("p"):
                 content_parts.append(p.get_text(strip=True))
-                links.extend(
-                    self._extract_links(p, "annex", f"anx_{number}")
-                )
+                links.extend(self._extract_links(p, "annex", f"anx_{number}"))
 
             annexes.append(
                 Annex(

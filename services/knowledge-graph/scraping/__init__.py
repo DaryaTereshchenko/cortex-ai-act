@@ -44,13 +44,14 @@ from .schemas import (
 
 __all__ = [
     "AI_ACT_SCHEMA",
+    "DSA_SCHEMA",
+    "SCHEMA_REGISTRY",
     "AIActExtractor",
     "Annex",
     "Article",
     "BaseDocumentExtractor",
     "Chapter",
     "CrossReference",
-    "DSA_SCHEMA",
     "DSAExtractor",
     "Document",
     "EURLexExtractor",
@@ -58,7 +59,6 @@ __all__ = [
     "Paragraph",
     "ParsingSchema",
     "Recital",
-    "SCHEMA_REGISTRY",
     "ScrapingError",
     "Section",
     "classify_link",
@@ -72,4 +72,3 @@ __all__ = [
     "get_urls",
     "register_parser",
 ]
-

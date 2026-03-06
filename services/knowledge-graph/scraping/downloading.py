@@ -150,6 +150,7 @@ def get_dsa_content(*, timeout: int = DEFAULT_TIMEOUT) -> BeautifulSoup:
 if __name__ == "__main__":
     # Add parent directory to path for logging_config import
     import sys
+
     _service_root = Path(__file__).resolve().parent.parent
     if str(_service_root) not in sys.path:
         sys.path.insert(0, str(_service_root))

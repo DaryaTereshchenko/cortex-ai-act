@@ -10,7 +10,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-
 # ---------------------------------------------------------------------------
 # Link Classification
 # ---------------------------------------------------------------------------
@@ -36,9 +35,7 @@ INTERNAL_PATTERNS: dict[str, LinkType] = {
     r"^#": LinkType.INTERNAL_OTHER,
 }
 
-EXTERNAL_EU_PATTERN = re.compile(
-    r"eur-lex\.europa\.eu.*CELEX[:%](\d{5}[A-Z]\d{4})"
-)
+EXTERNAL_EU_PATTERN = re.compile(r"eur-lex\.europa\.eu.*CELEX[:%](\d{5}[A-Z]\d{4})")
 ELI_PATTERN = re.compile(r"data\.europa\.eu/eli/")
 
 

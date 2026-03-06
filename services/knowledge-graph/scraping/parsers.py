@@ -59,10 +59,7 @@ class OJStyleExtractor(BaseDocumentExtractor):
     # We differentiate by checking for keywords in text.
 
     def _is_chapter_heading(self, elem: Tag, text: str) -> bool:
-        return (
-            "oj-ti-section-1" in elem.get("class", [])
-            and "CHAPTER" in text.upper()
-        )
+        return "oj-ti-section-1" in elem.get("class", []) and "CHAPTER" in text.upper()
 
     def _is_section_heading(self, elem: Tag) -> bool:
         text = elem.get_text(strip=True).upper()
@@ -73,25 +70,18 @@ class OJStyleExtractor(BaseDocumentExtractor):
         )
 
     def _is_article_element(self, elem: Tag) -> bool:
-        return (
-            "oj-ti-art" in elem.get("class", [])
-            or elem.get("id", "").startswith("art")
-        )
+        return "oj-ti-art" in elem.get("class", []) or elem.get("id", "").startswith("art")
 
     # Chapter/section titles live in a ``div.eli-title`` next sibling.
 
-    def _parse_chapter_heading(
-        self, elem: Tag, text: str, index: int
-    ) -> Chapter:
+    def _parse_chapter_heading(self, elem: Tag, text: str, index: int) -> Chapter:
         chapter = super()._parse_chapter_heading(elem, text, index)
         title_div = elem.find_next_sibling("div", class_="eli-title")
         if title_div:
             chapter.title = title_div.get_text(strip=True)
         return chapter
 
-    def _parse_section_heading(
-        self, elem: Tag, text: str, index: int
-    ) -> Section:
+    def _parse_section_heading(self, elem: Tag, text: str, index: int) -> Section:
         section = super()._parse_section_heading(elem, text, index)
         title_div = elem.find_next_sibling("div", class_="eli-title")
         if title_div:
@@ -222,10 +212,7 @@ def extract_from_html(
     Returns:
         Parsed :class:`Document` object.
     """
-    if isinstance(html, str):
-        soup = BeautifulSoup(html, "lxml")
-    else:
-        soup = html
+    soup = BeautifulSoup(html, "lxml") if isinstance(html, str) else html
 
     extractor = create_extractor(document_type, soup, base_url=base_url)
     return extractor.extract()
@@ -251,6 +238,7 @@ def extract_from_url(url: str, document_type: str = "ai_act") -> Document:
 # ---------------------------------------------------------------------------
 # CLI Entry Point  (python -m scraping.parsers [ai_act|dsa|all])
 # ---------------------------------------------------------------------------
+
 
 def _cli_extract(document_type: str) -> None:
     """Run extraction for a single document type and save JSON."""
@@ -295,10 +283,7 @@ if __name__ == "__main__":
     # Parse CLI argument: ai_act, dsa, or all (default: all)
     target = sys.argv[1] if len(sys.argv) > 1 else "all"
 
-    if target == "all":
-        doc_types = ["ai_act", "dsa"]
-    else:
-        doc_types = [target]
+    doc_types = ["ai_act", "dsa"] if target == "all" else [target]
 
     logger.info("Extracting documents: %s", doc_types)
 

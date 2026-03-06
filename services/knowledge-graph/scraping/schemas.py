@@ -87,8 +87,7 @@ class ParsingSchema:
 
     # --- Composite structural selector (document-order traversal) ---
     structural_selector: str = (
-        "p.ti-grseq-1, p.ti-section-1, p.ti-art, "
-        "div.eli-subdivision[id^='art']"
+        "p.ti-grseq-1, p.ti-section-1, p.ti-art, div.eli-subdivision[id^='art']"
     )
 
 
@@ -155,6 +154,5 @@ def get_schema(document_type: str) -> ParsingSchema:
     except KeyError:
         available = ", ".join(sorted(SCHEMA_REGISTRY))
         raise KeyError(
-            f"Unknown document type {document_type!r}. "
-            f"Available types: {available}"
+            f"Unknown document type {document_type!r}. Available types: {available}"
         ) from None
