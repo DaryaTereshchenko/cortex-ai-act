@@ -4,7 +4,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -12,8 +12,6 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import (
-    GraphEdge,
-    GraphNode,
     HealthResponse,
     QueryRequest,
     QueryResponse,
@@ -21,7 +19,7 @@ from .schemas import (
 )
 
 # In-memory query store (replace with Redis in production)
-query_store: Dict[str, QueryResponse] = {}
+query_store: dict[str, QueryResponse] = {}
 
 # Service URLs from environment
 REASONING_ENGINE_URL = os.getenv("REASONING_ENGINE_URL", "http://localhost:8002")
@@ -98,7 +96,9 @@ async def submit_query(request: QueryRequest) -> dict:
     )
 
     # Forward to reasoning engine asynchronously
-    asyncio.create_task(process_query(query_id, request))
+    task = asyncio.create_task(process_query(query_id, request))
+    app.state.tasks = getattr(app.state, "tasks", {})
+    app.state.tasks[query_id] = task
 
     return {"query_id": query_id, "status": "processing"}
 
@@ -497,7 +497,7 @@ async def get_graph_stats() -> dict:
 
 
 @app.post("/api/cypher")
-async def execute_cypher(query_payload: Dict[str, Any]) -> dict:
+async def execute_cypher(query_payload: dict[str, Any]) -> dict:
     """Execute a read-only Cypher query on the knowledge graph."""
     try:
         payload = {
@@ -514,7 +514,7 @@ async def execute_cypher(query_payload: Dict[str, Any]) -> dict:
 
 
 @app.post("/api/ingest")
-async def ingest_data(ingest_payload: Dict[str, Any]) -> dict:
+async def ingest_data(ingest_payload: dict[str, Any]) -> dict:
     """Ingest enriched JSON data into the knowledge graph (admin endpoint)."""
     try:
         payload = {

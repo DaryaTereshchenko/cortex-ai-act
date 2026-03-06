@@ -1,7 +1,7 @@
 """Pydantic schemas for API requests and responses."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -27,8 +27,8 @@ class LegalNode(BaseModel):
     node_type: str = Field(..., description="Node type: Article, Recital, Definition, TextChunk")
     content: str = Field(..., description="Full text of the legal article/definition")
     regulation: str = Field(..., description="Source regulation: eu_ai_act or dsa")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (chapter, section, url)")
-    entropy_score: Optional[float] = Field(default=None, description="Semantic entropy score")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata (chapter, section, url)")
+    entropy_score: float | None = Field(default=None, description="Semantic entropy score")
 
 
 class GraphNode(BaseModel):
@@ -37,8 +37,8 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     label: str = Field(..., description="Display label (e.g., 'Article 6')")
     node_type: str = Field(..., description="Node type: Article, Recital, Definition, etc.")
-    text_preview: Optional[str] = Field(default=None, description="First 200 chars of text")
-    entropy_score: Optional[float] = Field(default=None, description="Semantic entropy score")
+    text_preview: str | None = Field(default=None, description="First 200 chars of text")
+    entropy_score: float | None = Field(default=None, description="Semantic entropy score")
     pruned: bool = Field(default=False, description="Whether node was pruned")
     regulation: str = Field(..., description="Source regulation")
 
@@ -58,8 +58,8 @@ class ReasoningStep(BaseModel):
     step_number: int = Field(..., description="Step sequence number")
     agent: str = Field(..., description="Agent performing action: Retriever, Critic, Synthesizer")
     action: str = Field(..., description="Action description")
-    retrieved_nodes: List[str] = Field(default_factory=list, description="Nodes retrieved in this step")
-    entropy_reduction: Optional[float] = Field(
+    retrieved_nodes: list[str] = Field(default_factory=list, description="Nodes retrieved in this step")
+    entropy_reduction: float | None = Field(
         default=None,
         description="Percentage of context reduced by pruning"
     )
@@ -72,12 +72,12 @@ class QueryResponse(BaseModel):
     query_id: str = Field(..., description="Unique query identifier")
     status: str = Field(..., description="Query status: processing, completed, failed")
     question: str = Field(..., description="Original user question")
-    final_answer: Optional[str] = Field(default=None, description="Generated answer")
-    reasoning_steps: List[ReasoningStep] = Field(default_factory=list, description="Reasoning trace")
-    graph_data: Dict[str, Any] = Field(default_factory=dict, description="Graph nodes and edges")
-    citations: List[str] = Field(default_factory=list, description="Article citations")
-    metrics: Dict[str, Any] = Field(default_factory=dict, description="Performance metrics")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
+    final_answer: str | None = Field(default=None, description="Generated answer")
+    reasoning_steps: list[ReasoningStep] = Field(default_factory=list, description="Reasoning trace")
+    graph_data: dict[str, Any] = Field(default_factory=dict, description="Graph nodes and edges")
+    citations: list[str] = Field(default_factory=list, description="Article citations")
+    metrics: dict[str, Any] = Field(default_factory=dict, description="Performance metrics")
+    error: str | None = Field(default=None, description="Error message if failed")
 
 
 class HealthResponse(BaseModel):
