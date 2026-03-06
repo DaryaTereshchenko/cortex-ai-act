@@ -2,6 +2,8 @@
 
 REST API backed by **Neo4j** that stores EU regulatory documents (AI Act, Digital Services Act) as a richly connected knowledge graph. Designed to be queried by LLM agents via Cypher or the convenience REST endpoints.
 
+Includes a standalone **Streamlit UI** (`ui/`) for interactive graph exploration.
+
 ---
 
 ## Table of contents
@@ -15,6 +17,7 @@ REST API backed by **Neo4j** that stores EU regulatory documents (AI Act, Digita
 7. [Cypher query examples](#cypher-query-examples)
 8. [Environment variables](#environment-variables)
 9. [Running locally](#running-locally)
+10. [Knowledge Graph UI](#knowledge-graph-ui)
 
 ---
 
@@ -22,13 +25,14 @@ REST API backed by **Neo4j** that stores EU regulatory documents (AI Act, Digita
 
 The graph currently contains **two EU regulations**, both ingested from enriched JSON files produced by the scraping + LLM enrichment pipeline:
 
-| Regulation | `regulation` ID | Chapters | Sections | Articles | Paragraphs | Points | Recitals | Annexes | Definitions | Cross-references |
+| Regulation | `regulation` ID | Chapters | Sections | Articles | Paragraphs | SubParagraphs | Recitals | Annexes | Definitions | Cross-references |
 |---|---|---|---|---|---|---|---|---|---|---|
 | EU AI Act (2024/1689) | `eu_ai_act` | 13 | 16 | 113 | 593 | 345 | 180 | 13 | 69 | 348 |
-| Digital Services Act (2022/2065) | `eu_dsa` | 5 | 12 | 93 | 363 | 295 | 156 | 0 | 5 | 193 |
+| Digital Services Act (2022/2065) | `dsa` | 5 | 12 | 93 | 363 | 295 | 156 | 0 | 5 | 193 |
 
 Articles include LLM-generated metadata: `summary`, `key_obligations`, `key_topics`, `applies_to`, `cross_references`, `regulatory_action`.
-Chapters and sections hold: `summary`, `key_themes`, `scope_description`, `regulatory_functions`.
+Chapters hold: `summary`, `key_themes`, `scope_description`, `regulatory_functions`.
+Sections hold: `key_themes`, `applies_to`.
 
 ---
 
@@ -100,18 +104,18 @@ Top-level node representing a single EU regulation.
 | Property | Type | Description |
 |---|---|---|
 | `id` | string | `eu_ai_act_art_6_par_1` |
-| `number` | string | Paragraph number within article |
+| `number` | string | Paragraph number within article (`1`, `2`, `intro`) |
 | `text` | string | Full paragraph text |
 | `regulation` | string | Regulation ID |
 
-### Point
-Sub-paragraph lettered items such as `Article 6(1)(a)`.
+### SubParagraph
+Lettered/numbered sub-items within a paragraph, e.g. `Article 6(1)(a)`.
 
 | Property | Type | Description |
 |---|---|---|
-| `id` | string | `eu_ai_act_art_6_par_1_pt_a` |
-| `number` | string | Letter (e.g. `a`, `b`) |
-| `text` | string | Point text |
+| `id` | string | `eu_ai_act_art_6_subpar_1(a)` |
+| `number` | string | Compound number (e.g. `1(a)`, `2(b)`, `3(i)`) |
+| `text` | string | Sub-paragraph text |
 | `regulation` | string | Regulation ID |
 
 ### Recital
@@ -151,38 +155,50 @@ Terms defined in Article 3 of each regulation.
 |---|---|---|
 | `id` | string | `eu_ai_act_def_ai_system` |
 | `term` | string | Defined term |
-| `definition_text` | string | Full definition |
-| `source_article` | string | Article ID (always `*_art_3`) |
+| `definition_text` | string | Definition body (after "'term' means") |
+| `full_text` | string | Full original paragraph text |
 | `regulation` | string | Regulation ID |
-| `paragraph_num` | string | Paragraph number in Article 3 |
+| `paragraph_num` | string | Source paragraph number (e.g. `0(1)`) |
 
 ---
 
 ## Relationship types
 
-| Relationship | Direction | Description |
-|---|---|---|
-| `CONTAINS` | parent → child | Structural containment (Regulation→Chapter, Chapter→Section, Section/Chapter→Article, Article→Paragraph, Paragraph→Point, Regulation→Recital, Regulation→Annex, Annex→AnnexSection) |
-| `PART_OF` | child → parent | Inverse of CONTAINS |
-| `NEXT` | node → successor | Sequential ordering within siblings (chapters, articles, paragraphs, recitals, annexes) |
-| `PREVIOUS` | node → predecessor | Inverse of NEXT |
-| `REFERENCES` | source → target | Cross-reference between nodes. Properties: `anchor` (link text), `url` (target URL), or `context` (metadata reference text) |
-| `DEFINES` | Article → Definition | Article 3 defines a term |
+| Relationship | Direction | Properties | Description |
+|---|---|---|---|
+| `CONTAINS` | parent -> child | — | Structural containment (Regulation->Chapter, Chapter->Section, Section/Chapter->Article, Article->Paragraph, Paragraph->SubParagraph, Article->Definition, Definition->SubParagraph, Regulation->Recital, Regulation->Annex, Annex->AnnexSection) |
+| `PART_OF` | child -> parent | — | Inverse of CONTAINS |
+| `NEXT` | node -> successor | — | Sequential ordering within siblings (chapters, articles, paragraphs, recitals, annexes, definitions) |
+| `PREVIOUS` | node -> predecessor | — | Inverse of NEXT |
+| `REFERENCES` | source -> target | `anchor`, `url` or `context` | Cross-reference between nodes. From link parsing: `anchor` (link text) + `url`. From metadata: `context` (reference text). |
+| `RELATED_REGULATION` | Regulation <-> Regulation | — | Bidirectional link between co-ingested regulations |
+| `OVERLAPS` | Article <-> Article | `theme` | Curated thematic overlap between articles of different regulations (e.g. `theme: "transparency"`) |
+| `SIMILAR_TERM` | Definition <-> Definition | `reason` | Curated semantic similarity between definitions across regulations (e.g. `reason: "both define service providers"`) |
 
 ### Structural hierarchy
 
 ```
 Regulation
-├── CONTAINS → Chapter
-│   ├── CONTAINS → Section
-│   │   └── CONTAINS → Article
-│   │       └── CONTAINS → Paragraph
-│   │           └── CONTAINS → Point
-│   └── CONTAINS → Article  (chapters without sections)
-├── CONTAINS → Recital
-├── CONTAINS → Annex
-│   └── CONTAINS → AnnexSection
-└── (Article 3) ─ DEFINES → Definition
+├── CONTAINS -> Chapter
+│   ├── CONTAINS -> Section
+│   │   └── CONTAINS -> Article
+│   │       ├── CONTAINS -> Paragraph
+│   │       │   └── CONTAINS -> SubParagraph
+│   │       └── CONTAINS -> Definition         (Article 3 only)
+│   │           └── CONTAINS -> SubParagraph   (sub-items of a definition)
+│   └── CONTAINS -> Article  (chapters without sections)
+│       └── …
+├── CONTAINS -> Recital
+├── CONTAINS -> Annex
+│   └── CONTAINS -> AnnexSection
+└── RELATED_REGULATION -> Regulation  (cross-regulation)
+```
+
+### Cross-regulation links
+
+```
+Article  ──OVERLAPS {theme}──>  Article        (curated thematic pairs)
+Definition ──SIMILAR_TERM {reason}── Definition (curated semantic pairs)
 ```
 
 ---
@@ -198,20 +214,20 @@ All node IDs follow a deterministic pattern:
 | Section | `{reg_id}_ch_{ch}_sec_{sec}` | `eu_ai_act_ch_III_sec_1` |
 | Article | `{reg_id}_art_{number}` | `eu_ai_act_art_6` |
 | Paragraph | `{reg_id}_art_{art}_par_{par}` | `eu_ai_act_art_6_par_1` |
-| Point | `{reg_id}_art_{art}_par_{par}_pt_{letter}` | `eu_ai_act_art_6_par_1_pt_a` |
+| SubParagraph | `{reg_id}_art_{art}_subpar_{N(letter)}` | `eu_ai_act_art_6_subpar_1(a)` |
 | Recital | `{reg_id}_rec_{number}` | `eu_ai_act_rec_12` |
 | Annex | `{reg_id}_anx_{number}` | `eu_ai_act_anx_III` |
 | AnnexSection | `{reg_id}_anx_{anx}_sec_{letter}` | `eu_ai_act_anx_I_sec_A` |
 | Definition | `{reg_id}_def_{safe_term}` | `eu_ai_act_def_ai_system` |
 
-The two regulation IDs currently in the graph are **`eu_ai_act`** and **`eu_dsa`**.
+The two regulation IDs currently in the graph are **`eu_ai_act`** and **`dsa`**.
 
 ---
 
 ## Indexes & constraints
 
 ### Uniqueness constraints (one per node type)
-Every node type has a uniqueness constraint on its `id` property (`reg_id`, `rec_id`, `ch_id`, `sec_id`, `art_id`, `par_id`, `point_id`, `anx_id`, `anx_sec_id`, `def_id`).
+Every node type has a uniqueness constraint on its `id` property: `reg_id`, `rec_id`, `ch_id`, `sec_id`, `art_id`, `par_id`, `subpar_id`, `anx_id`, `anx_sec_id`, `def_id`.
 
 ### B-tree lookup indexes
 | Index | Node | Property |
@@ -220,6 +236,8 @@ Every node type has a uniqueness constraint on its `id` property (`reg_id`, `rec
 | `par_reg` | Paragraph | `regulation` |
 | `rec_reg` | Recital | `regulation` |
 | `ch_reg` | Chapter | `regulation` |
+| `def_reg` | Definition | `regulation` |
+| `subpar_reg` | SubParagraph | `regulation` |
 | `art_number` | Article | `number` |
 | `rec_number` | Recital | `number` |
 
@@ -229,6 +247,8 @@ Every node type has a uniqueness constraint on its `id` property (`reg_id`, `rec
 | `article_fulltext` | Article | `title`, `summary`, `full_text` |
 | `paragraph_fulltext` | Paragraph | `text` |
 | `recital_fulltext` | Recital | `text` |
+| `definition_fulltext` | Definition | `term`, `definition_text` |
+| `subparagraph_fulltext` | SubParagraph | `text` |
 
 Use with `CALL db.index.fulltext.queryNodes('article_fulltext', 'high risk')`.
 
@@ -248,6 +268,9 @@ Ingest enriched JSON files into Neo4j.
 // Omit "file" to ingest all enriched files
 { "clear": true }
 ```
+
+### GET `/graph/stats`
+Node and relationship counts (requires APOC).
 
 ### GET `/graph/stats/simple`
 Node and relationship counts (no APOC needed).
@@ -320,14 +343,14 @@ curl "http://localhost:8001/graph/search?q=high+risk+ai+system&regulation=eu_ai_
 ```
 
 ### GET `/graph/traverse/{node_id}?direction=both&depth=1`
-Graph traversal from any node. `direction`: `in`, `out`, or `both`. `depth`: 1–3.
+Graph traversal from any node. `direction`: `in`, `out`, or `both`. `depth`: 1-3.
 
 ```bash
 curl "http://localhost:8001/graph/traverse/eu_ai_act_art_6?direction=out&depth=2"
 ```
 
 ### POST `/graph/cypher`
-Execute an arbitrary **read-only** Cypher query. Write operations (`CREATE`, `MERGE`, `DELETE`, etc.) are rejected.
+Execute an arbitrary **read-only** Cypher query. Write operations (`CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, `DROP`) are rejected.
 
 ```bash
 curl -X POST http://localhost:8001/graph/cypher \
@@ -385,7 +408,7 @@ Find definitions from both the AI Act and the DSA, then look for overlapping ter
 
 ```cypher
 MATCH (d1:Definition {regulation: 'eu_ai_act'})
-MATCH (d2:Definition {regulation: 'eu_dsa'})
+MATCH (d2:Definition {regulation: 'dsa'})
 WHERE d1.term = d2.term
    OR d1.term CONTAINS d2.term
    OR d2.term CONTAINS d1.term
@@ -401,7 +424,7 @@ ORDER BY d1.term
 curl -X POST http://localhost:8001/graph/cypher \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "MATCH (d1:Definition {regulation: \"eu_ai_act\"}) MATCH (d2:Definition {regulation: \"eu_dsa\"}) WHERE d1.term = d2.term OR d1.term CONTAINS d2.term OR d2.term CONTAINS d1.term RETURN d1.term AS ai_act_term, d1.definition_text AS ai_act_definition, d2.term AS dsa_term, d2.definition_text AS dsa_definition ORDER BY d1.term"
+    "query": "MATCH (d1:Definition {regulation: \"eu_ai_act\"}) MATCH (d2:Definition {regulation: \"dsa\"}) WHERE d1.term = d2.term OR d1.term CONTAINS d2.term OR d2.term CONTAINS d1.term RETURN d1.term AS ai_act_term, d1.definition_text AS ai_act_definition, d2.term AS dsa_term, d2.definition_text AS dsa_definition ORDER BY d1.term"
   }'
 ```
 
@@ -435,6 +458,19 @@ curl -X POST http://localhost:8001/graph/cypher \
     "query": "MATCH (source:Article {id: $art_id}) MATCH (source)-[ref:REFERENCES]->(target) OPTIONAL MATCH (target)-[:PART_OF*1..2]->(ch:Chapter) RETURN source.title AS source_title, ref.context AS reference_context, labels(target)[0] AS target_type, target.id AS target_id, target.title AS target_title, CASE labels(target)[0] WHEN \"Article\" THEN target.summary WHEN \"Annex\" THEN left(target.content, 200) ELSE null END AS target_summary, ch.title AS chapter_title ORDER BY target.id",
     "parameters": {"art_id": "eu_ai_act_art_6"}
   }'
+```
+
+### 4. Find curated thematic overlaps between AI Act and DSA
+
+```cypher
+MATCH (a:Article)-[o:OVERLAPS]->(b:Article)
+WHERE a.regulation = 'eu_ai_act' AND b.regulation = 'dsa'
+RETURN o.theme       AS theme,
+       a.number      AS ai_act_article,
+       a.title       AS ai_act_title,
+       b.number      AS dsa_article,
+       b.title       AS dsa_title
+ORDER BY o.theme, a.number
 ```
 
 ---
@@ -473,3 +509,28 @@ curl http://localhost:8001/graph/stats/simple
 ```
 
 Interactive API docs are available at `http://localhost:8001/docs` (Swagger UI).
+
+---
+
+## Knowledge Graph UI
+
+A standalone Streamlit app for interactive graph exploration lives in `ui/`.
+
+**With Docker Compose:**
+```bash
+docker compose up kg-ui
+# Open http://localhost:8510
+```
+
+**Standalone (local dev):**
+```bash
+cd services/knowledge-graph/ui
+pip install -r requirements.txt
+KG_SERVICE_URL=http://localhost:8001 streamlit run app.py
+# Open http://localhost:8501
+```
+
+Features:
+- **Graph Explorer** — preset views visualizing regulation hierarchies, cross-regulation overlaps, definitions, and deep-dives
+- **Statistics** — node and relationship count dashboard
+- **Cypher Query** — run arbitrary read-only Cypher queries with tabular results
