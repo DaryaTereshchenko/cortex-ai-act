@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 """Web-UI — Streamlit entry point for CORTEX-RAG."""
-=======
-"""Web-UI — Streamlit entry point for the CORTEX full-stack application."""
->>>>>>> edb0f5f887bc0de910d15760c9df3108f28c807b
 
 from __future__ import annotations
 
@@ -10,7 +6,6 @@ import os
 import time
 from datetime import datetime
 
-<<<<<<< HEAD
 import requests
 import streamlit as st
 
@@ -143,7 +138,7 @@ with st.sidebar:
         st.error("❌ API Unreachable")
 
 # Main tabs
-query_tab, history_tab, about_tab = st.tabs(["🔍 Query", "📜 History", "ℹ️ About"])
+query_tab, browse_tab, history_tab, about_tab = st.tabs(["🔍 Query", "📖 Browse", "📜 History", "ℹ️ About"])
 
 with query_tab:
     st.subheader("Ask a Regulatory Compliance Question")
@@ -293,6 +288,103 @@ with query_tab:
             except Exception as e:
                 st.error(f"Request failed: {str(e)}")
 
+with browse_tab:
+    st.subheader("📖 Browse Regulations")
+
+    browse_section = st.selectbox(
+        "Select Section",
+        options=["Regulations", "Articles", "Chapters", "Definitions", "Recitals", "Annexes"],
+    )
+
+    try:
+        if browse_section == "Regulations":
+            response = requests.get(f"{API_BASE_URL}/regulations", timeout=10)
+            if response.status_code == 200:
+                regs = response.json()
+                for reg in regs:
+                    st.write(f"**{reg.get('title', 'Unknown')}** (ID: {reg.get('id')})")
+            else:
+                st.error("Failed to load regulations")
+
+        elif browse_section == "Articles":
+            col1, col2 = st.columns(2)
+            with col1:
+                reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+            with col2:
+                article_num = st.number_input("Article Number:", min_value=1, max_value=200)
+
+            if st.button("📄 Load Article"):
+                response = requests.get(
+                    f"{API_BASE_URL}/article/{reg_select}/{int(article_num)}", timeout=10
+                )
+                if response.status_code == 200:
+                    article = response.json()
+                    st.write(f"**Title:** {article.get('title', 'N/A')}")
+                    st.write(f"**Content:** {article.get('content', 'N/A')}")
+                    if article.get("children"):
+                        st.write("**Sub-sections:**")
+                        for child in article["children"]:
+                            st.write(f"  - {child.get('title', child.get('id'))}")
+                else:
+                    st.error(f"Article not found (Status: {response.status_code})")
+
+        elif browse_section == "Chapters":
+            col1, col2 = st.columns(2)
+            with col1:
+                reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+            with col2:
+                chapter_num = st.text_input("Chapter Number:")
+
+            if st.button("📚 Load Chapter") and chapter_num:
+                response = requests.get(
+                    f"{API_BASE_URL}/chapter/{reg_select}/{chapter_num}", timeout=10
+                )
+                if response.status_code == 200:
+                    chapter = response.json()
+                    st.write(f"**Title:** {chapter.get('title', 'N/A')}")
+                    if chapter.get("children"):
+                        st.write("**Articles in Chapter:**")
+                        for child in chapter["children"]:
+                            st.write(f"  - Article {child.get('number')}: {child.get('title', 'N/A')}")
+                else:
+                    st.error(f"Chapter not found (Status: {response.status_code})")
+
+        elif browse_section == "Definitions":
+            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+
+            response = requests.get(f"{API_BASE_URL}/definitions/{reg_select}", timeout=10)
+            if response.status_code == 200:
+                definitions = response.json()
+                for defn in definitions[:20]:
+                    st.write(f"**{defn.get('term', 'Unknown')}:** {defn.get('definition', 'N/A')}")
+            else:
+                st.error("Failed to load definitions")
+
+        elif browse_section == "Recitals":
+            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+
+            response = requests.get(f"{API_BASE_URL}/recitals/{reg_select}", timeout=10)
+            if response.status_code == 200:
+                recitals = response.json()
+                for recital in recitals[:20]:
+                    st.write(f"**Recital {recital.get('number')}:** {recital.get('text', 'N/A')[:150]}...")
+            else:
+                st.error("Failed to load recitals")
+
+        elif browse_section == "Annexes":
+            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+
+            response = requests.get(f"{API_BASE_URL}/annexes/{reg_select}", timeout=10)
+            if response.status_code == 200:
+                annexes = response.json()
+                for annex in annexes:
+                    st.write(f"**Annex {annex.get('number')}:** {annex.get('title', 'N/A')}")
+            else:
+                st.error("Failed to load annexes")
+
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+
 with history_tab:
     st.subheader("Query History")
 
@@ -342,54 +434,3 @@ with about_tab:
         *Built with ⚡ for digital sustainability and regulatory compliance*
         """
     )
-=======
-import httpx
-import streamlit as st
-
-st.set_page_config(page_title="CORTEX AI-Act", page_icon="🧠", layout="wide")
-
-KG_URL = os.getenv("KG_SERVICE_URL", "http://localhost:8001")
-RE_URL = os.getenv("RE_SERVICE_URL", "http://localhost:8002")
-
-# ── Page layout ──────────────────────────────────────────────────────────────
-
-st.title("🧠 CORTEX — AI Act Compliance Platform")
-
-st.markdown(
-    """
-    Welcome to **CORTEX**, the AI Act compliance analysis platform.
-
-    Use the services below to explore regulation data and run compliance queries.
-    """
-)
-
-# ── Service health checks ────────────────────────────────────────────────────
-
-st.subheader("Service Status")
-
-col_kg, col_re = st.columns(2)
-
-with col_kg:
-    try:
-        resp = httpx.get(f"{KG_URL}/health", timeout=5.0)
-        data = resp.json()
-        status = data.get("status", "unknown")
-        if status == "ok":
-            st.success("Knowledge Graph: connected")
-        else:
-            st.warning(f"Knowledge Graph: {status}")
-    except Exception:
-        st.error("Knowledge Graph: unreachable")
-
-with col_re:
-    try:
-        resp = httpx.get(f"{RE_URL}/health", timeout=5.0)
-        data = resp.json()
-        status = data.get("status", "unknown")
-        if status == "ok":
-            st.success("Reasoning Engine: connected")
-        else:
-            st.warning(f"Reasoning Engine: {status}")
-    except Exception:
-        st.error("Reasoning Engine: unreachable")
->>>>>>> edb0f5f887bc0de910d15760c9df3108f28c807b

@@ -397,6 +397,139 @@ async def delete_query(query_id: str) -> dict:
     raise HTTPException(status_code=404, detail="Query not found")
 
 
+# ── Knowledge Graph Browse Endpoints ────────────────────────────────────────
+
+
+@app.get("/api/regulations")
+async def list_regulations() -> list[dict]:
+    """List all available regulations from the knowledge graph."""
+    try:
+        response = await app.state.http_client.get(f"{KNOWLEDGE_GRAPH_URL}/graph/regulations")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch regulations: {str(e)}")
+
+
+@app.get("/api/article/{regulation}/{number}")
+async def get_article(regulation: str, number: int) -> dict:
+    """Get a specific article by regulation and number."""
+    try:
+        response = await app.state.http_client.get(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/article/{regulation}/{number}"
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Article {number} not found in {regulation}")
+        raise HTTPException(status_code=503, detail="Knowledge graph service error")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/api/chapter/{regulation}/{number}")
+async def get_chapter(regulation: str, number: str) -> dict:
+    """Get a chapter with its articles."""
+    try:
+        response = await app.state.http_client.get(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/chapter/{regulation}/{number}"
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Chapter {number} not found in {regulation}")
+        raise HTTPException(status_code=503, detail="Knowledge graph service error")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/api/recitals/{regulation}")
+async def list_recitals(regulation: str, skip: int = 0, limit: int = 20) -> list[dict]:
+    """List recitals for a regulation."""
+    try:
+        response = await app.state.http_client.get(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/recitals/{regulation}",
+            params={"skip": skip, "limit": limit},
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch recitals: {str(e)}")
+
+
+@app.get("/api/annexes/{regulation}")
+async def list_annexes(regulation: str) -> list[dict]:
+    """List annexes for a regulation."""
+    try:
+        response = await app.state.http_client.get(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/annexes/{regulation}"
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch annexes: {str(e)}")
+
+
+@app.get("/api/definitions/{regulation}")
+async def list_definitions(regulation: str) -> list[dict]:
+    """List definitions for a regulation."""
+    try:
+        response = await app.state.http_client.get(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/definitions/{regulation}"
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch definitions: {str(e)}")
+
+
+@app.get("/api/stats")
+async def get_graph_stats() -> dict:
+    """Get graph statistics."""
+    try:
+        response = await app.state.http_client.get(f"{KNOWLEDGE_GRAPH_URL}/graph/stats/simple")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch stats: {str(e)}")
+
+
+@app.post("/api/cypher")
+async def execute_cypher(query_payload: Dict[str, Any]) -> dict:
+    """Execute a read-only Cypher query on the knowledge graph."""
+    try:
+        payload = {
+            "query": query_payload.get("query", ""),
+            "parameters": query_payload.get("parameters", {}),
+        }
+        response = await app.state.http_client.post(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/cypher", json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Cypher execution failed: {str(e)}")
+
+
+@app.post("/api/ingest")
+async def ingest_data(ingest_payload: Dict[str, Any]) -> dict:
+    """Ingest enriched JSON data into the knowledge graph (admin endpoint)."""
+    try:
+        payload = {
+            "file": ingest_payload.get("file"),
+            "clear": ingest_payload.get("clear", False),
+        }
+        response = await app.state.http_client.post(
+            f"{KNOWLEDGE_GRAPH_URL}/graph/ingest", json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ingest failed: {str(e)}")
+
+
 @app.websocket("/ws/{query_id}")
 async def websocket_endpoint(websocket: WebSocket, query_id: str) -> None:
     """WebSocket for real-time updates on query processing."""
