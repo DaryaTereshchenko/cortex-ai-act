@@ -133,11 +133,12 @@ services:
     container_name: cortex-web-ui
     restart: unless-stopped
     ports:
-      - "${UI_PORT:-8501}:8501"
+      - "${UI_PORT:-8501}:8501"    # Streamlit
+      - "${API_PORT:-8000}:8000"   # FastAPI
     environment:
       <<: *common-env
-      KG_SERVICE_URL: http://knowledge-graph:8000
-      RE_SERVICE_URL: http://reasoning-engine:8000
+      REASONING_ENGINE_URL: http://reasoning-engine:8001
+      KNOWLEDGE_GRAPH_URL: http://knowledge-graph:8002
     depends_on:
       - knowledge-graph
       - reasoning-engine
@@ -145,6 +146,12 @@ services:
       - ./services/web-ui:/app
     networks:
       - cortex-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # ===========================================================================
   # 5. BENCHMARKING SERVICE  —  Sustainability & performance tracking
