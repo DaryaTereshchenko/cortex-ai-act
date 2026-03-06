@@ -4,7 +4,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Dict
+from typing import Any, Dict
 from uuid import uuid4
 
 import httpx
@@ -15,7 +15,6 @@ from .schemas import (
     GraphEdge,
     GraphNode,
     HealthResponse,
-    LegalNode,
     QueryRequest,
     QueryResponse,
     ReasoningStep,
@@ -25,8 +24,8 @@ from .schemas import (
 query_store: Dict[str, QueryResponse] = {}
 
 # Service URLs from environment
-REASONING_ENGINE_URL = os.getenv("REASONING_ENGINE_URL", "http://reasoning-engine:8001")
-KNOWLEDGE_GRAPH_URL = os.getenv("KNOWLEDGE_GRAPH_URL", "http://knowledge-graph:8002")
+REASONING_ENGINE_URL = os.getenv("REASONING_ENGINE_URL", "http://localhost:8002")
+KNOWLEDGE_GRAPH_URL = os.getenv("KNOWLEDGE_GRAPH_URL", "http://localhost:8001")
 
 
 @asynccontextmanager
@@ -107,152 +106,25 @@ async def submit_query(request: QueryRequest) -> dict:
 async def process_query(query_id: str, request: QueryRequest) -> None:
     """Process query by forwarding to reasoning engine."""
     try:
-        # Simulate processing time
-        await asyncio.sleep(2)
+        started = datetime.now()
 
-        # Mock legal nodes from knowledge-graph (matches KG service schema)
-        mock_legal_nodes = [
-            {
-                "id": "ai_act_art_6",
-                "node_type": "Article",
-                "content": "Article 6 - Classification rules for high-risk AI systems. Providers shall draw up documentation before placing high-risk AI systems on the market...",
-                "regulation": "eu_ai_act",
-                "metadata": {"chapter": "III", "section": "1", "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj#art6"},
-                "entropy_score": 0.92,
-            },
-            {
-                "id": "ai_act_rec_47",
-                "node_type": "Recital",
-                "content": "Recital 47 - High-risk AI systems should be designed in a way that ensures human oversight and control...",
-                "regulation": "eu_ai_act",
-                "metadata": {"interprets": "ai_act_art_6", "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj#rec47"},
-                "entropy_score": 0.85,
-            },
-            {
-                "id": "ai_act_def_3",
-                "node_type": "Definition",
-                "content": "AI system: a machine-based system designed to operate with some degree of autonomy...",
-                "regulation": "eu_ai_act",
-                "metadata": {"source": "Article 3"},
-                "entropy_score": 0.78,
-            },
-            {
-                "id": "dsa_art_24",
-                "node_type": "Article",
-                "content": "Article 24 - Systemic risks shall refer to risks that may have systemic implications...",
-                "regulation": "dsa",
-                "metadata": {"chapter": "IV", "section": "2"},
-                "entropy_score": 0.65,
-            },
-        ]
+        kg_search = await _fetch_kg_search(request)
+        graph_data = await _build_graph_from_kg(kg_search, request)
 
-        # Simulate reasoning engine output (matches reasoning-engine schema)
-        result = {
-            "final_answer": (
-                "Based on Article 6 of the EU AI Act and Article 24 of the DSA, "
-                "high-risk AI systems require classification documentation and systemic risk assessment. "
-                "The system must maintain human oversight per Recital 47."
-            ),
-            "reasoning_steps": [
+        reasoning_response = await _try_reasoning_engine(request, kg_search)
+        if reasoning_response:
+            result = reasoning_response
+            result.setdefault("graph_data", graph_data)
+            result.setdefault("citations", _build_citations_from_kg(kg_search))
+            result.setdefault(
+                "metrics",
                 {
-                    "step_number": 1,
-                    "agent": "Retriever",
-                    "action": "Searched knowledge graph for 'high-risk AI classification'",
-                    "retrieved_nodes": ["ai_act_art_6", "ai_act_rec_47", "ai_act_def_3"],
-                    "entropy_reduction": 0.18,
-                    "timestamp": datetime.now().isoformat(),
+                    "reasoning_steps": len(result.get("reasoning_steps", [])),
+                    "nodes_retrieved": len(graph_data.get("nodes", [])),
                 },
-                {
-                    "step_number": 2,
-                    "agent": "Critic",
-                    "action": "Validated hierarchy - checked for interpretive gaps",
-                    "retrieved_nodes": ["ai_act_rec_47"],
-                    "entropy_reduction": 0.08,
-                    "timestamp": datetime.now().isoformat(),
-                },
-                {
-                    "step_number": 3,
-                    "agent": "Synthesizer",
-                    "action": "Generated final answer with citations",
-                    "retrieved_nodes": ["ai_act_art_6", "ai_act_rec_47", "dsa_art_24"],
-                    "entropy_reduction": 0.12,
-                    "timestamp": datetime.now().isoformat(),
-                },
-            ],
-            "graph_data": {
-                "nodes": [
-                    {
-                        "id": "ai_act_art_6",
-                        "label": "Article 6",
-                        "node_type": "Article",
-                        "text_preview": "Classification rules for high-risk AI systems. Providers shall draw up documentation...",
-                        "entropy_score": 0.92,
-                        "pruned": False,
-                        "regulation": "eu_ai_act",
-                    },
-                    {
-                        "id": "ai_act_rec_47",
-                        "label": "Recital 47",
-                        "node_type": "Recital",
-                        "text_preview": "High-risk AI systems should be designed in a way that ensures human oversight...",
-                        "entropy_score": 0.85,
-                        "pruned": False,
-                        "regulation": "eu_ai_act",
-                    },
-                    {
-                        "id": "ai_act_def_3",
-                        "label": "Definition (Art. 3)",
-                        "node_type": "Definition",
-                        "text_preview": "AI system: a machine-based system designed to operate with some degree...",
-                        "entropy_score": 0.78,
-                        "pruned": False,
-                        "regulation": "eu_ai_act",
-                    },
-                    {
-                        "id": "dsa_art_24",
-                        "label": "Article 24 (DSA)",
-                        "node_type": "Article",
-                        "text_preview": "Systemic risks shall refer to risks that may have systemic implications...",
-                        "entropy_score": 0.65,
-                        "pruned": False,
-                        "regulation": "dsa",
-                    },
-                ],
-                "edges": [
-                    {
-                        "source": "ai_act_art_6",
-                        "target": "ai_act_rec_47",
-                        "relationship": ":INTERPRETS",
-                        "strength": 0.95,
-                    },
-                    {
-                        "source": "ai_act_art_6",
-                        "target": "ai_act_def_3",
-                        "relationship": ":USES_TERM",
-                        "strength": 0.88,
-                    },
-                    {
-                        "source": "ai_act_art_6",
-                        "target": "dsa_art_24",
-                        "relationship": ":OVERLAPS_WITH",
-                        "strength": 0.72,
-                    },
-                ],
-            },
-            "citations": [
-                "Article 6 (EU AI Act) - Classification rules for high-risk AI systems",
-                "Recital 47 (EU AI Act) - Human oversight requirement",
-                "Article 24 (DSA) - Systemic risks for VLOPs",
-            ],
-            "metrics": {
-                "reasoning_steps": 3,
-                "entropy_reduction_percent": 38,  # (0.18 + 0.08 + 0.12) * 100
-                "tokens_saved": 1240,
-                "latency_seconds": 2.0,
-                "nodes_pruned": 0,
-                "nodes_retrieved": 4,
-            },
-        }
+            )
+        else:
+            result = _build_local_fallback_result(request, kg_search, graph_data, started)
 
         query_store[query_id].status = "completed"
         query_store[query_id].final_answer = result.get("final_answer")
@@ -266,6 +138,203 @@ async def process_query(query_id: str, request: QueryRequest) -> None:
     except Exception as e:
         query_store[query_id].status = "failed"
         query_store[query_id].error = str(e)
+
+
+async def _fetch_kg_search(request: QueryRequest) -> list[dict[str, Any]]:
+    """Retrieve relevant legal nodes from the knowledge-graph service."""
+    params: dict[str, Any] = {"q": request.question, "limit": 12}
+    if request.regulation != "both":
+        params["regulation"] = request.regulation
+
+    response = await app.state.http_client.get(f"{KNOWLEDGE_GRAPH_URL}/graph/search", params=params)
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else []
+
+
+async def _build_graph_from_kg(
+    kg_search: list[dict[str, Any]],
+    request: QueryRequest,
+) -> dict[str, list[dict[str, Any]]]:
+    """Transform KG search + traversal responses into graph nodes/edges for UI."""
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str], dict[str, Any]] = {}
+
+    top_hits = kg_search[: min(5, len(kg_search))]
+    for hit in top_hits:
+        node = hit.get("result", {})
+        node_id = str(node.get("id", "")).strip()
+        if not node_id:
+            continue
+
+        label = _display_label(node_id=node_id, node=node)
+        node_type = str(hit.get("label") or _infer_node_type(node_id))
+        preview = str(node.get("summary") or node.get("full_text") or node.get("text") or "")
+        nodes[node_id] = {
+            "id": node_id,
+            "label": label,
+            "node_type": node_type,
+            "text_preview": preview[:220] if preview else None,
+            "entropy_score": float(hit.get("score", 0.0)),
+            "pruned": False,
+            "regulation": str(node.get("regulation") or request.regulation),
+        }
+
+        try:
+            traversal = await app.state.http_client.get(
+                f"{KNOWLEDGE_GRAPH_URL}/graph/traverse/{node_id}",
+                params={"depth": request.max_hops, "direction": "both"},
+            )
+            traversal.raise_for_status()
+            payload = traversal.json()
+            source = payload.get("source", {})
+            src_id = str(source.get("id", node_id))
+
+            for neighbor in payload.get("neighbors", []):
+                n_id = str(neighbor.get("id", "")).strip()
+                if not n_id:
+                    continue
+                if n_id not in nodes:
+                    n_type = str(neighbor.get("label") or _infer_node_type(n_id))
+                    n_title = str(neighbor.get("title") or "")
+                    nodes[n_id] = {
+                        "id": n_id,
+                        "label": n_title[:60] if n_title else n_id,
+                        "node_type": n_type,
+                        "text_preview": n_title[:220] if n_title else None,
+                        "entropy_score": None,
+                        "pruned": False,
+                        "regulation": str(request.regulation),
+                    }
+
+                edge_key = tuple(sorted((src_id, n_id)))
+                if edge_key not in edges:
+                    edges[edge_key] = {
+                        "source": src_id,
+                        "target": n_id,
+                        "relationship": ":CONNECTED",
+                        "strength": 1.0,
+                    }
+        except Exception:
+            # Keep primary search nodes even if traversal fails for some hits.
+            continue
+
+    return {"nodes": list(nodes.values()), "edges": list(edges.values())}
+
+
+async def _try_reasoning_engine(
+    request: QueryRequest,
+    kg_search: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Call reasoning-engine if available; return None when unavailable."""
+    payload = {
+        "question": request.question,
+        "regulation": request.regulation,
+        "max_hops": request.max_hops,
+        "enable_pruning": request.enable_pruning,
+        "enable_self_correction": request.enable_self_correction,
+        "kg_hits": kg_search,
+    }
+
+    try:
+        response = await app.state.http_client.post(f"{REASONING_ENGINE_URL}/api/reason", json=payload)
+        if response.status_code >= 400:
+            return None
+        parsed = response.json()
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _build_local_fallback_result(
+    request: QueryRequest,
+    kg_search: list[dict[str, Any]],
+    graph_data: dict[str, list[dict[str, Any]]],
+    started: datetime,
+) -> dict[str, Any]:
+    """Build a deterministic fallback when reasoning-engine is not yet integrated."""
+    retrieved_ids = [str(item.get("result", {}).get("id", "")).strip() for item in kg_search]
+    retrieved_ids = [node_id for node_id in retrieved_ids if node_id][:6]
+
+    top_summaries: list[str] = []
+    for item in kg_search[:3]:
+        result = item.get("result", {})
+        snippet = str(result.get("summary") or result.get("full_text") or result.get("text") or "").strip()
+        if snippet:
+            top_summaries.append(snippet[:220])
+
+    summary_text = " ".join(top_summaries) if top_summaries else "No relevant legal summary returned by KG search."
+    elapsed = (datetime.now() - started).total_seconds()
+
+    return {
+        "final_answer": (
+            f"KG retrieved {len(retrieved_ids)} relevant nodes for your question. "
+            f"Preliminary context: {summary_text}"
+        ),
+        "reasoning_steps": [
+            {
+                "step_number": 1,
+                "agent": "Retriever",
+                "action": "Queried knowledge-graph /graph/search and /graph/traverse",
+                "retrieved_nodes": retrieved_ids,
+                "entropy_reduction": 0.0,
+                "timestamp": datetime.now().isoformat(),
+            },
+            {
+                "step_number": 2,
+                "agent": "Synthesizer",
+                "action": "Built interim answer while reasoning-engine endpoint is unavailable",
+                "retrieved_nodes": retrieved_ids[:3],
+                "entropy_reduction": 0.0,
+                "timestamp": datetime.now().isoformat(),
+            },
+        ],
+        "graph_data": graph_data,
+        "citations": _build_citations_from_kg(kg_search),
+        "metrics": {
+            "reasoning_steps": 2,
+            "entropy_reduction_percent": 0,
+            "tokens_saved": 0,
+            "latency_seconds": round(elapsed, 3),
+            "nodes_pruned": 0,
+            "nodes_retrieved": len(graph_data.get("nodes", [])),
+        },
+    }
+
+
+def _build_citations_from_kg(kg_search: list[dict[str, Any]]) -> list[str]:
+    citations: list[str] = []
+    for item in kg_search[:5]:
+        node = item.get("result", {})
+        node_id = str(node.get("id", "")).strip()
+        if not node_id:
+            continue
+        title = str(node.get("title") or node.get("term") or node_id)
+        regulation = str(node.get("regulation") or "unknown")
+        citations.append(f"{title} ({regulation}) - {node_id}")
+    return citations
+
+
+def _display_label(node_id: str, node: dict[str, Any]) -> str:
+    if node.get("title"):
+        return str(node["title"])[:60]
+    if node.get("term"):
+        return str(node["term"])[:60]
+    if node.get("number") is not None:
+        return f"{_infer_node_type(node_id)} {node.get('number')}"
+    return node_id[:60]
+
+
+def _infer_node_type(node_id: str) -> str:
+    if "_art_" in node_id:
+        return "Article"
+    if "_rec_" in node_id:
+        return "Recital"
+    if "_def_" in node_id:
+        return "Definition"
+    if "_par_" in node_id:
+        return "Paragraph"
+    return "Node"
 
 
 @app.get("/api/query/{query_id}", response_model=QueryResponse)
