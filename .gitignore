@@ -47,4 +47,4 @@ mlruns/
 *.bin
 
 # ── Extracted data ───────────────────────────────────────────────────────────
-services/knowledge-graph/data/ai_act_extracted.json
+

@@ -10,12 +10,15 @@ pydantic-settings>=2.2,<3
 websockets>=12.0,<13
 requests>=2.31,<3
 
+<<<<<<< HEAD
 # Graph visualization
 plotly>=6.0,<7
 networkx>=3.2,<4
 streamlit-agraph>=0.0.45,<1
 pyvis>=0.3,<1
 
+=======
+>>>>>>> edb0f5f887bc0de910d15760c9df3108f28c807b
 # Testing & linting
 pytest>=8,<9
 pytest-asyncio>=0.23,<1

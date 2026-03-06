@@ -1,6 +1,6 @@
 ###############################################################################
 # Knowledge-Graph Service
-# — PDF parsing, Neo4j ingestion, Cypher query API
+# — JSON ingestion, Neo4j graph management, Cypher query API
 ###############################################################################
 FROM python:3.11-slim AS base
 
@@ -12,12 +12,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps for PDF processing
+# System deps (minimal — heavy PDF tools only needed if parsing PDFs)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
-        poppler-utils \
-        tesseract-ocr \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/knowledge-graph/requirements.txt .
