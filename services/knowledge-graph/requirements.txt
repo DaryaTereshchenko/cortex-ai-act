@@ -9,9 +9,9 @@ pymupdf>=1.25,<2
 pdfplumber>=0.11,<1
 markdownify>=0.14,<1
 
-# LLM graph stores (pick one or both)
-llama-index-graph-stores-neo4j>=0.4,<1
-langchain-community>=0.3,<1
+# HTML parsing (scraping)
+beautifulsoup4>=4.12,<5
+lxml>=5.0,<6
 
 # Testing & linting
 pytest>=8,<9

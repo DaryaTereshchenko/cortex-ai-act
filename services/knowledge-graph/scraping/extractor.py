@@ -1,329 +1,89 @@
 """
-EUR-Lex document structure extractor.
+EUR-Lex base document extractor.
 
-Parses HTML from EUR-Lex to extract recitals, articles, and cross-references
-in a structured format suitable for knowledge graph ingestion.
+Provides :class:`BaseDocumentExtractor`, a schema-driven parser that extracts
+recitals, articles, chapters, sections, annexes, and cross-references from
+EUR-Lex HTML.  Concrete subclasses (in ``parsers.py``) can override any
+``_extract_*`` method to handle document-specific quirks without duplicating
+the shared logic.
+
+Backward-compatible aliases (``EURLexExtractor``, ``extract_from_html``,
+``extract_from_url``) are kept in ``parsers.py``.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-import sys
-from dataclasses import dataclass, field
-from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 
+from .models import (
+    Annex,
+    Article,
+    Chapter,
+    CrossReference,
+    Document,
+    Paragraph,
+    Recital,
+    Section,
+    classify_link,
+)
+from .schemas import ParsingSchema
+
 if TYPE_CHECKING:
     pass
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Data Models
-# ---------------------------------------------------------------------------
-
-
-class LinkType(Enum):
-    """Classification of EUR-Lex hyperlinks."""
-
-    INTERNAL_ARTICLE = "internal_article"
-    INTERNAL_RECITAL = "internal_recital"
-    INTERNAL_ANNEX = "internal_annex"
-    INTERNAL_OTHER = "internal_other"
-    EXTERNAL_EU_LAW = "external_eu_law"
-    EXTERNAL_ELI = "external_eli"
-    EXTERNAL_OTHER = "external_other"
-
-
-@dataclass
-class CrossReference:
-    """Represents a hyperlink/cross-reference in the document."""
-
-    source_type: str  # "article", "recital", "annex", "preamble"
-    source_id: str  # e.g., "art_6", "rec_47"
-    target_url: str
-    anchor_text: str
-    link_type: LinkType
-    target_id: str | None = None  # Parsed target identifier if internal
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "source_type": self.source_type,
-            "source_id": self.source_id,
-            "target_url": self.target_url,
-            "anchor_text": self.anchor_text,
-            "link_type": self.link_type.value,
-            "target_id": self.target_id,
-        }
-
-
-@dataclass
-class Paragraph:
-    """A single paragraph or point within an article."""
-
-    number: str  # e.g., "1", "2(a)", "2(b)(i)"
-    text: str
-    links: list[CrossReference] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "text": self.text,
-            "links": [link.to_dict() for link in self.links],
-        }
-
-
-@dataclass
-class Article:
-    """An article in the regulation."""
-
-    number: str  # e.g., "6", "52"
-    title: str
-    paragraphs: list[Paragraph] = field(default_factory=list)
-    chapter: str | None = None
-    section: str | None = None
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "title": self.title,
-            "chapter": self.chapter,
-            "section": self.section,
-            "paragraphs": [p.to_dict() for p in self.paragraphs],
-        }
-
-
-@dataclass
-class Recital:
-    """A recital from the preamble."""
-
-    number: str  # e.g., "1", "47"
-    text: str
-    links: list[CrossReference] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "text": self.text,
-            "links": [link.to_dict() for link in self.links],
-        }
-
-
-@dataclass
-class Chapter:
-    """A chapter in the regulation."""
-
-    number: str  # e.g., "I", "II", "III"
-    title: str
-    sections: list[Section] = field(default_factory=list)
-    articles: list[Article] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "title": self.title,
-            "sections": [s.to_dict() for s in self.sections],
-            "articles": [a.to_dict() for a in self.articles],
-        }
-
-
-@dataclass
-class Section:
-    """A section within a chapter."""
-
-    number: str
-    title: str
-    articles: list[Article] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "title": self.title,
-            "articles": [a.to_dict() for a in self.articles],
-        }
-
-
-@dataclass
-class Annex:
-    """An annex to the regulation."""
-
-    number: str  # e.g., "I", "III"
-    title: str
-    content: str
-    links: list[CrossReference] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "number": self.number,
-            "title": self.title,
-            "content": self.content,
-            "links": [link.to_dict() for link in self.links],
-        }
-
-
-@dataclass
-class Document:
-    """Complete parsed EUR-Lex document."""
-
-    title: str
-    celex_number: str  # e.g., "32024R1689"
-    recitals: list[Recital] = field(default_factory=list)
-    chapters: list[Chapter] = field(default_factory=list)
-    articles: list[Article] = field(default_factory=list)  # Standalone articles
-    annexes: list[Annex] = field(default_factory=list)
-    all_links: list[CrossReference] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            "title": self.title,
-            "celex_number": self.celex_number,
-            "recitals": [r.to_dict() for r in self.recitals],
-            "chapters": [c.to_dict() for c in self.chapters],
-            "articles": [a.to_dict() for a in self.articles],
-            "annexes": [a.to_dict() for a in self.annexes],
-            "all_links": [link.to_dict() for link in self.all_links],
-            "stats": {
-                "recital_count": len(self.recitals),
-                "chapter_count": len(self.chapters),
-                "article_count": self._count_articles(),
-                "annex_count": len(self.annexes),
-                "total_links": len(self.all_links),
-            },
-        }
-
-    def _count_articles(self) -> int:
-        count = len(self.articles)
-        for chapter in self.chapters:
-            count += len(chapter.articles)
-            for section in chapter.sections:
-                count += len(section.articles)
-        return count
-
 
 # ---------------------------------------------------------------------------
-# Link Classification
+# Base Extractor (Template-Method pattern)
 # ---------------------------------------------------------------------------
 
-# Patterns for identifying link types
-INTERNAL_PATTERNS = {
-    r"#art[_-]?(\d+)": LinkType.INTERNAL_ARTICLE,
-    r"#rec[_-]?(\d+)": LinkType.INTERNAL_RECITAL,
-    r"#anx[_-]?([IVX]+|\d+)": LinkType.INTERNAL_ANNEX,
-    r"^#": LinkType.INTERNAL_OTHER,
-}
 
-EXTERNAL_EU_PATTERN = re.compile(
-    r"eur-lex\.europa\.eu.*CELEX[:%](\d{5}[A-Z]\d{4})"
-)
-ELI_PATTERN = re.compile(r"data\.europa\.eu/eli/")
-
-
-def classify_link(href: str, base_url: str = "") -> tuple[LinkType, str | None]:
+class BaseDocumentExtractor:
     """
-    Classify a hyperlink and extract target ID if applicable.
+    Schema-driven extractor for EUR-Lex HTML documents.
 
-    Args:
-        href: The href attribute value.
-        base_url: Base URL for resolving relative links.
-
-    Returns:
-        Tuple of (LinkType, target_id or None).
-    """
-    if not href:
-        return LinkType.EXTERNAL_OTHER, None
-
-    # Internal links (same document)
-    for pattern, link_type in INTERNAL_PATTERNS.items():
-        match = re.search(pattern, href, re.IGNORECASE)
-        if match:
-            target_id = match.group(1) if match.lastindex else href.lstrip("#")
-            return link_type, target_id
-
-    # External EU legislation
-    eu_match = EXTERNAL_EU_PATTERN.search(href)
-    if eu_match:
-        return LinkType.EXTERNAL_EU_LAW, eu_match.group(1)
-
-    # ELI URIs
-    if ELI_PATTERN.search(href):
-        return LinkType.EXTERNAL_ELI, None
-
-    # Other external
-    return LinkType.EXTERNAL_OTHER, None
-
-
-# ---------------------------------------------------------------------------
-# EUR-Lex HTML Parser
-# ---------------------------------------------------------------------------
-
-
-class EURLexExtractor:
-    """
-    Extracts structured data from EUR-Lex HTML documents.
-
-    EUR-Lex CSS class patterns:
-    - `.ti-grseq-1`: Chapter titles (CHAPTER I, II, etc.)
-    - `.ti-section-1`: Section titles
-    - `.ti-art`: Article titles ("Article 6")
-    - `.sti-art`: Article subtitles (article name)
-    - `.normal`: Regular paragraph text
-    - `.li`: List items (points/subpoints)
+    Override any ``_extract_*`` / ``_parse_*`` hook to customise behaviour
+    for a particular regulation without duplicating shared parsing logic.
     """
 
-    # CSS selectors for EUR-Lex structure
-    SELECTORS = {
-        "title": "p.title-doc-first, p.doc-ti",
-        "recital_container": "div.eli-subdivision[id^='rct']",
-        "recital_text": "p.normal",
-        "chapter": "p.ti-grseq-1",
-        "section": "p.ti-section-1",
-        "article_title": "p.ti-art",
-        "article_subtitle": "p.sti-art",
-        "paragraph": "p.normal, p.li",
-        "annex_title": "p.ti-grseq-1[id^='anx']",
-    }
-
-    def __init__(self, soup: BeautifulSoup, base_url: str = ""):
-        """
-        Initialize extractor with parsed HTML.
-
-        Args:
-            soup: BeautifulSoup parsed document.
-            base_url: Base URL for resolving relative links.
-        """
+    def __init__(
+        self,
+        soup: BeautifulSoup,
+        schema: ParsingSchema,
+        base_url: str = "",
+    ) -> None:
         self.soup = soup
+        self.schema = schema
         self.base_url = base_url
         self._current_chapter: str | None = None
         self._current_section: str | None = None
 
-    def extract(self) -> Document:
-        """
-        Extract all structured data from the document.
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
-        Returns:
-            Complete Document object with all parsed elements.
-        """
-        logger.info("Starting document extraction")
+    def extract(self) -> Document:
+        """Run the full extraction pipeline and return a :class:`Document`."""
+        logger.info(
+            "Starting extraction for document type: %s",
+            self.schema.document_type,
+        )
 
         doc = Document(
             title=self._extract_title(),
             celex_number=self._extract_celex(),
+            document_type=self.schema.document_type,
         )
 
-        # Extract recitals
         doc.recitals = self._extract_recitals()
         logger.info("Extracted %d recitals", len(doc.recitals))
 
-        # Extract main body (chapters/sections/articles)
         doc.chapters, doc.articles = self._extract_body()
         logger.info(
             "Extracted %d chapters, %d standalone articles",
@@ -331,31 +91,31 @@ class EURLexExtractor:
             len(doc.articles),
         )
 
-        # Extract annexes
         doc.annexes = self._extract_annexes()
         logger.info("Extracted %d annexes", len(doc.annexes))
 
-        # Collect all links
         doc.all_links = self._collect_all_links(doc)
         logger.info("Collected %d total cross-references", len(doc.all_links))
 
         return doc
 
+    # ------------------------------------------------------------------
+    # Title & CELEX
+    # ------------------------------------------------------------------
+
     def _extract_title(self) -> str:
-        """Extract document title."""
-        title_elem = self.soup.select_one(self.SELECTORS["title"])
+        """Extract the document title using the schema selector."""
+        title_elem = self.soup.select_one(self.schema.title_selector)
         if title_elem:
             return title_elem.get_text(strip=True)
         return "Unknown Title"
 
     def _extract_celex(self) -> str:
-        """Extract CELEX number from URL or metadata."""
-        # Try meta tag
+        """Extract CELEX number from HTML meta tags or canonical link."""
         meta = self.soup.find("meta", {"name": "celex"})
         if meta and meta.get("content"):
             return meta["content"]
 
-        # Try to find in URL-like patterns
         for link in self.soup.find_all("link", {"rel": "canonical"}):
             href = link.get("href", "")
             match = re.search(r"CELEX[:%](\d{5}[A-Z]\d{4})", href)
@@ -364,42 +124,51 @@ class EURLexExtractor:
 
         return "unknown"
 
-    def _extract_recitals(self) -> list[Recital]:
-        """Extract all recitals from the preamble."""
-        recitals = []
+    # ------------------------------------------------------------------
+    # Recitals
+    # ------------------------------------------------------------------
 
-        # Method 1: Look for eli-subdivision containers
-        for container in self.soup.select("div.eli-subdivision[id^='rct']"):
+    def _extract_recitals(self) -> list[Recital]:
+        """Extract recitals -- override to change recital parsing logic."""
+        recitals: list[Recital] = []
+
+        for container in self.soup.select(self.schema.recital_container_selector):
             recital_id = container.get("id", "")
-            number = re.search(r"rct[_-]?(\d+)", recital_id)
+            number = re.search(self.schema.recital_id_pattern, recital_id)
             num_str = number.group(1) if number else str(len(recitals) + 1)
 
-            text_parts = []
-            links = []
+            text_parts: list[str] = []
+            links: list[CrossReference] = []
 
             for p in container.select("p"):
                 text_parts.append(p.get_text(strip=True))
                 links.extend(self._extract_links(p, "recital", f"rec_{num_str}"))
 
             if text_parts:
-                recitals.append(Recital(
-                    number=num_str,
-                    text=" ".join(text_parts),
-                    links=links,
-                ))
+                recitals.append(
+                    Recital(
+                        number=num_str,
+                        text=" ".join(text_parts),
+                        links=links,
+                    )
+                )
 
-        # Method 2: Fallback - look for numbered paragraphs in preamble
+        # Fallback when no <div> containers are found
         if not recitals:
             recitals = self._extract_recitals_fallback()
 
         return recitals
 
     def _extract_recitals_fallback(self) -> list[Recital]:
-        """Fallback recital extraction using paragraph numbering."""
-        recitals = []
+        """
+        Fallback recital extraction using ``(N)`` paragraph numbering.
+
+        Override to handle documents with non-standard preamble layout.
+        """
+        recitals: list[Recital] = []
         recital_pattern = re.compile(r"^\((\d+)\)\s*")
 
-        for p in self.soup.select("p.normal"):
+        for p in self.soup.select(self.schema.recital_text_selector):
             text = p.get_text(strip=True)
             match = recital_pattern.match(text)
             if match:
@@ -410,55 +179,45 @@ class EURLexExtractor:
 
         return recitals
 
-    def _extract_body(self) -> tuple[list[Chapter], list[Article]]:
-        """
-        Extract the main body structure (chapters, sections, articles).
+    # ------------------------------------------------------------------
+    # Body (chapters / sections / articles)
+    # ------------------------------------------------------------------
 
-        Returns:
-            Tuple of (chapters list, standalone articles list).
-        """
+    def _extract_body(self) -> tuple[list[Chapter], list[Article]]:
+        """Extract the main body structure."""
         chapters: list[Chapter] = []
         standalone_articles: list[Article] = []
 
         current_chapter: Chapter | None = None
         current_section: Section | None = None
 
-        # Find all structural elements
-        structural_elements = self.soup.select(
-            "p.ti-grseq-1, p.ti-section-1, p.ti-art, div.eli-subdivision[id^='art']"
-        )
+        structural_elements = self.soup.select(self.schema.structural_selector)
 
         for elem in structural_elements:
             text = elem.get_text(strip=True) if isinstance(elem, Tag) else ""
 
-            # Chapter detection
-            if "ti-grseq-1" in elem.get("class", []) and "CHAPTER" in text.upper():
-                chapter_match = re.search(r"CHAPTER\s+([IVXLCDM]+|\d+)", text, re.I)
-                title_match = re.search(r"CHAPTER\s+[IVXLCDM\d]+\s*(.+)", text, re.I)
-
-                current_chapter = Chapter(
-                    number=chapter_match.group(1) if chapter_match else str(len(chapters) + 1),
-                    title=title_match.group(1).strip() if title_match else text,
-                )
+            # --- Chapter ---
+            if self._is_chapter_heading(elem, text):
+                current_chapter = self._parse_chapter_heading(elem, text, len(chapters))
                 chapters.append(current_chapter)
                 current_section = None
                 self._current_chapter = current_chapter.number
                 logger.debug("Found chapter: %s", current_chapter.number)
 
-            # Section detection
-            elif "ti-section-1" in elem.get("class", []):
-                section_match = re.search(r"Section\s+(\d+)", text, re.I)
-                current_section = Section(
-                    number=section_match.group(1) if section_match else str(len(current_chapter.sections) + 1 if current_chapter else 1),
-                    title=text,
+            # --- Section ---
+            elif self._is_section_heading(elem):
+                current_section = self._parse_section_heading(
+                    elem,
+                    text,
+                    len(current_chapter.sections if current_chapter else []),
                 )
                 if current_chapter:
                     current_chapter.sections.append(current_section)
                 self._current_section = current_section.number
                 logger.debug("Found section: %s", current_section.number)
 
-            # Article detection
-            elif "ti-art" in elem.get("class", []) or elem.get("id", "").startswith("art"):
+            # --- Article ---
+            elif self._is_article_element(elem):
                 article = self._parse_article(elem)
                 if article:
                     article.chapter = self._current_chapter
@@ -475,15 +234,51 @@ class EURLexExtractor:
 
         return chapters, standalone_articles
 
+    # Heading detection helpers (override for alternative structures) --------
+
+    def _is_chapter_heading(self, elem: Tag, text: str) -> bool:
+        cls_token = self.schema.chapter_selector.split(",")[0].strip().lstrip("p.")
+        return (
+            cls_token in elem.get("class", [])
+            and self.schema.chapter_keyword.upper() in text.upper()
+        )
+
+    def _is_section_heading(self, elem: Tag) -> bool:
+        cls_token = self.schema.section_selector.split(",")[0].strip().lstrip("p.")
+        return cls_token in elem.get("class", [])
+
+    def _is_article_element(self, elem: Tag) -> bool:
+        cls_token = self.schema.article_title_selector.split(",")[0].strip().lstrip("p.")
+        return cls_token in elem.get("class", []) or elem.get("id", "").startswith("art")
+
+    # Heading parsers -------------------------------------------------------
+
+    def _parse_chapter_heading(self, elem: Tag, text: str, index: int) -> Chapter:
+        chapter_match = re.search(self.schema.chapter_number_pattern, text, re.I)
+        title_match = re.search(self.schema.chapter_title_pattern, text, re.I)
+        return Chapter(
+            number=(chapter_match.group(1) if chapter_match else str(index + 1)),
+            title=title_match.group(1).strip() if title_match else text,
+        )
+
+    def _parse_section_heading(self, elem: Tag, text: str, index: int) -> Section:
+        section_match = re.search(self.schema.section_number_pattern, text, re.I)
+        return Section(
+            number=(section_match.group(1) if section_match else str(index + 1)),
+            title=text,
+        )
+
+    # ------------------------------------------------------------------
+    # Article parsing
+    # ------------------------------------------------------------------
+
     def _parse_article(self, elem: Tag) -> Article | None:
         """Parse a single article element."""
-        # Get article number
         text = elem.get_text(strip=True)
-        article_match = re.search(r"Article\s+(\d+)", text, re.I)
+        article_match = re.search(self.schema.article_number_pattern, text, re.I)
         if not article_match:
-            # Try ID-based extraction
             article_id = elem.get("id", "")
-            id_match = re.search(r"art[_-]?(\d+)", article_id, re.I)
+            id_match = re.search(self.schema.article_id_pattern, article_id, re.I)
             if id_match:
                 article_num = id_match.group(1)
             else:
@@ -491,141 +286,274 @@ class EURLexExtractor:
         else:
             article_num = article_match.group(1)
 
-        # Find article title (subtitle element)
+        # Subtitle / title
+        # EUR-Lex structures can have:
+        # 1. Direct sibling: <p class="oj-ti-art"> followed by <p class="oj-sti-art">
+        # 2. Nested in div: <p class="oj-ti-art"> followed by <div class="eli-title"><p class="oj-sti-art">
         title = ""
-        subtitle_elem = elem.find_next_sibling("p", class_="sti-art")
+        subtitle_cls = self.schema.article_subtitle_selector.lstrip("p.")
+
+        # Try direct sibling first
+        subtitle_elem = elem.find_next_sibling("p", class_=subtitle_cls)
+
+        # If not found, check inside next sibling div.eli-title
+        if not subtitle_elem:
+            title_div = elem.find_next_sibling("div", class_="eli-title")
+            if title_div:
+                subtitle_elem = title_div.find("p", class_=subtitle_cls)
+
         if subtitle_elem:
             title = subtitle_elem.get_text(strip=True)
 
-        # Find article container or paragraphs
         article = Article(number=article_num, title=title)
         article.paragraphs = self._extract_article_paragraphs(elem, article_num)
-
         return article
 
     def _extract_article_paragraphs(self, article_elem: Tag, article_num: str) -> list[Paragraph]:
-        """Extract paragraphs from an article."""
-        paragraphs = []
+        """Extract paragraphs from an article element.
+
+        EUR-Lex uses two structures for sub-points:
+        1. Inline: ``(a) text content`` in a single <p>
+        2. Table-based: <table><tr><td>(a)</td><td>text content</td></tr></table>
+
+        This method handles both by:
+        - Selecting all paragraph elements
+        - Skipping standalone point markers (e.g., just "(a)")
+        - Processing tables to combine marker + content cells
+        """
+        paragraphs: list[Paragraph] = []
         source_id = f"art_{article_num}"
 
-        # Look for the containing div or subsequent paragraphs
         container = article_elem.find_parent("div", class_="eli-subdivision")
-        if container:
-            para_elems = container.select("p.normal, p.li, table.li")
-        else:
-            # Find siblings until next article
-            para_elems = []
-            for sibling in article_elem.find_next_siblings():
-                if isinstance(sibling, Tag):
-                    if "ti-art" in sibling.get("class", []):
-                        break
-                    if sibling.name == "p":
-                        para_elems.append(sibling)
+        if not container:
+            return paragraphs
 
         para_pattern = re.compile(r"^(\d+)\.\s*")
-        point_pattern = re.compile(r"^\(([a-z]|\d+)\)\s*")
+        # Matches standalone markers: (a), (1), (ii), (iii), etc.
+        point_standalone_pattern = re.compile(r"^\(([a-z]+|\d+|[ivx]+)\)$")
+        # Matches markers with optional content following
+        point_inline_pattern = re.compile(r"^\(([a-z]+|\d+|[ivx]+)\)\s*")
 
         current_para_num = 0
-        for p_elem in para_elems:
+
+        # First pass: get all paragraphs (excluding standalone markers which are in tables)
+        for p_elem in container.select(self.schema.paragraph_selector):
+            # Skip article title elements
+            if "oj-ti-art" in p_elem.get("class", []):
+                continue
+            if "oj-sti-art" in p_elem.get("class", []):
+                continue
+
             text = p_elem.get_text(strip=True)
             if not text:
                 continue
 
-            # Check for numbered paragraph
+            # Skip standalone point markers — they're handled via table processing
+            if point_standalone_pattern.match(text):
+                continue
+
             para_match = para_pattern.match(text)
-            point_match = point_pattern.match(text)
+            inline_point_match = point_inline_pattern.match(text)
 
             if para_match:
                 current_para_num = int(para_match.group(1))
                 content = para_pattern.sub("", text)
                 num_str = str(current_para_num)
-            elif point_match:
-                content = point_pattern.sub("", text)
-                num_str = f"{current_para_num}({point_match.group(1)})"
+            elif inline_point_match:
+                # Inline point with content
+                content = point_inline_pattern.sub("", text)
+                num_str = f"{current_para_num}({inline_point_match.group(1)})"
             else:
                 content = text
                 num_str = str(current_para_num) if current_para_num else "intro"
 
+            # Check if this paragraph is inside a table (content cell)
+            # If so, skip it here — it will be handled in table processing
+            parent_td = p_elem.find_parent("td")
+            if parent_td:
+                # Check if there's a sibling td with a point marker
+                parent_tr = parent_td.find_parent("tr")
+                if parent_tr:
+                    cells = parent_tr.find_all("td")
+                    if len(cells) >= 2:
+                        first_cell_text = cells[0].get_text(strip=True)
+                        if point_standalone_pattern.match(first_cell_text):
+                            continue  # Skip, will be handled in table pass
+
             links = self._extract_links(p_elem, "article", source_id)
             paragraphs.append(Paragraph(number=num_str, text=content, links=links))
 
+        # Second pass: process tables for point lists
+        # Only process top-level tables (not nested inside other tables)
+        # to avoid duplicates from nested table structures
+        all_tables = container.find_all("table")
+        nested_table_ids = set()
+        for table in all_tables:
+            for inner_table in table.find_all("table"):
+                nested_table_ids.add(id(inner_table))
+
+        top_level_tables = [t for t in all_tables if id(t) not in nested_table_ids]
+
+        # Pattern for numeric point markers like (1), (2), (45)
+        numeric_point_pattern = re.compile(r"^\((\d+)\)$")
+        # Pattern for letter point markers like (a), (b), (i), (ii)
+        letter_point_pattern = re.compile(r"^\([a-z]+\)$|^\([ivx]+\)$")
+
+        current_para_num = 0
+        for table in top_level_tables:
+            rows = table.find_all("tr")
+            if not rows:
+                continue
+
+            # Check first row to determine table type
+            first_cells = rows[0].find_all("td")
+            if len(first_cells) < 2:
+                continue
+
+            first_marker = first_cells[0].get_text(strip=True)
+
+            # Determine current_para_num for this table by looking at preceding paragraph
+            prev_para = table.find_previous_sibling(
+                lambda t: isinstance(t, Tag) and t.name in ("p", "div")
+            )
+            if prev_para:
+                prev_text = prev_para.get_text(strip=True)
+                prev_match = para_pattern.match(prev_text)
+                if prev_match:
+                    current_para_num = int(prev_match.group(1))
+
+            # Skip letter-marked tables at the top level ONLY when numbered
+            # paragraphs have already been collected (meaning these tables are
+            # duplicates of inline content).  When no numbered paragraphs exist
+            # (e.g. DSA Article 3 Definitions), the letter tables ARE the
+            # primary content and must be processed.
+            if letter_point_pattern.match(first_marker) and current_para_num == 0:
+                has_numbered = any(re.match(r"^\d+$", p.number) for p in paragraphs)
+                if has_numbered:
+                    continue
+
+            # Check if first row has a numeric marker with nested content
+            # (e.g., definition with embedded sub-points)
+            first_row_has_nested_def = False
+            if numeric_point_pattern.match(first_marker):
+                # Check if content cell has nested tables (sub-points)
+                has_nested = len(first_cells[1].find_all("table")) > 0
+                first_row_has_nested_def = has_nested
+
+            for row_idx, row in enumerate(rows):
+                # If first row has nested definition, skip subsequent rows
+                # (sub-points are already captured in first row's get_text())
+                if first_row_has_nested_def and row_idx > 0:
+                    continue
+
+                cells = row.find_all("td")
+                if len(cells) >= 2:
+                    marker_text = cells[0].get_text(strip=True)
+                    content_text = cells[1].get_text(strip=True)
+
+                    marker_match = point_standalone_pattern.match(marker_text)
+                    if marker_match and content_text:
+                        num_str = f"{current_para_num}({marker_match.group(1)})"
+                        links = self._extract_links(cells[1], "article", source_id)
+                        paragraphs.append(Paragraph(number=num_str, text=content_text, links=links))
+
+        # Sort paragraphs by number to maintain proper order
+        def sort_key(p):
+            # Parse "4(a)" → (4, 0, 'a'), "4(10)" → (4, 10, ''), "4" → (4, -1, ''), "intro" → (-1, -1, '')
+            # Using -1 for missing parts to sort before any actual values
+            m = re.match(r"(\d+)(?:\(([a-z]+|\d+)\))?", p.number)
+            if m:
+                main_num = int(m.group(1))
+                sub = m.group(2) or ""
+                if sub.isdigit():
+                    # Numeric sub-point: (1), (10), etc. - sort numerically
+                    return (main_num, int(sub), "")
+                else:
+                    # Letter sub-point: (a), (b), etc. - sort alphabetically
+                    return (main_num, 0, sub)
+            return (-1, -1, p.number)
+
+        paragraphs.sort(key=sort_key)
+
         return paragraphs
+
+    # ------------------------------------------------------------------
+    # Annexes
+    # ------------------------------------------------------------------
 
     def _extract_annexes(self) -> list[Annex]:
         """Extract annexes from the document."""
-        annexes = []
+        annexes: list[Annex] = []
 
-        for container in self.soup.select("div.eli-subdivision[id^='anx']"):
+        for container in self.soup.select(self.schema.annex_container_selector):
             annex_id = container.get("id", "")
-            number_match = re.search(r"anx[_-]?([IVXLCDM]+|\d+)", annex_id, re.I)
+            number_match = re.search(self.schema.annex_id_pattern, annex_id, re.I)
             number = number_match.group(1) if number_match else str(len(annexes) + 1)
 
-            # Get title
-            title_elem = container.select_one("p.ti-grseq-1, p.title")
+            title_elem = container.select_one(self.schema.annex_title_selector)
             title = title_elem.get_text(strip=True) if title_elem else f"Annex {number}"
 
-            # Get content
-            content_parts = []
-            links = []
+            content_parts: list[str] = []
+            links: list[CrossReference] = []
             for p in container.select("p"):
                 content_parts.append(p.get_text(strip=True))
                 links.extend(self._extract_links(p, "annex", f"anx_{number}"))
 
-            annexes.append(Annex(
-                number=number,
-                title=title,
-                content="\n".join(content_parts),
-                links=links,
-            ))
+            annexes.append(
+                Annex(
+                    number=number,
+                    title=title,
+                    content="\n".join(content_parts),
+                    links=links,
+                )
+            )
 
         return annexes
+
+    # ------------------------------------------------------------------
+    # Link extraction (shared)
+    # ------------------------------------------------------------------
 
     def _extract_links(
         self, element: Tag, source_type: str, source_id: str
     ) -> list[CrossReference]:
-        """
-        Extract all hyperlinks from an element.
-
-        Args:
-            element: BeautifulSoup element to search.
-            source_type: Type of source element (article, recital, etc.).
-            source_id: ID of source element.
-
-        Returns:
-            List of CrossReference objects.
-        """
-        links = []
+        """Extract all hyperlinks from an HTML element."""
+        links: list[CrossReference] = []
 
         for a_tag in element.find_all("a", href=True):
             href = a_tag["href"]
             anchor_text = a_tag.get_text(strip=True)
 
-            # Resolve relative URLs
             if href.startswith("/") or href.startswith("./"):
                 href = urljoin(self.base_url, href)
 
             link_type, target_id = classify_link(href, self.base_url)
 
-            links.append(CrossReference(
-                source_type=source_type,
-                source_id=source_id,
-                target_url=href,
-                anchor_text=anchor_text,
-                link_type=link_type,
-                target_id=target_id,
-            ))
+            links.append(
+                CrossReference(
+                    source_type=source_type,
+                    source_id=source_id,
+                    target_url=href,
+                    anchor_text=anchor_text,
+                    link_type=link_type,
+                    target_id=target_id,
+                )
+            )
 
         return links
 
-    def _collect_all_links(self, doc: Document) -> list[CrossReference]:
-        """Collect all links from the document into a flat list."""
-        all_links = []
+    # ------------------------------------------------------------------
+    # Link aggregation
+    # ------------------------------------------------------------------
 
-        # From recitals
+    @staticmethod
+    def _collect_all_links(doc: Document) -> list[CrossReference]:
+        """Flatten all cross-references into a single list."""
+        all_links: list[CrossReference] = []
+
         for recital in doc.recitals:
             all_links.extend(recital.links)
 
-        # From articles (in chapters/sections)
         for chapter in doc.chapters:
             for article in chapter.articles:
                 for para in article.paragraphs:
@@ -635,122 +563,11 @@ class EURLexExtractor:
                     for para in article.paragraphs:
                         all_links.extend(para.links)
 
-        # From standalone articles
         for article in doc.articles:
             for para in article.paragraphs:
                 all_links.extend(para.links)
 
-        # From annexes
         for annex in doc.annexes:
             all_links.extend(annex.links)
 
         return all_links
-
-
-# ---------------------------------------------------------------------------
-# Convenience Functions
-# ---------------------------------------------------------------------------
-
-
-def extract_from_html(
-    html: str | BeautifulSoup,
-    base_url: str = "",
-) -> Document:
-    """
-    Extract structured data from EUR-Lex HTML.
-
-    Args:
-        html: Raw HTML string or parsed BeautifulSoup object.
-        base_url: Base URL for resolving relative links.
-
-    Returns:
-        Parsed Document object.
-    """
-    if isinstance(html, str):
-        soup = BeautifulSoup(html, "lxml")
-    else:
-        soup = html
-
-    extractor = EURLexExtractor(soup, base_url)
-    return extractor.extract()
-
-
-def extract_from_url(url: str) -> Document:
-    """
-    Fetch and extract structured data from a EUR-Lex URL.
-
-    Args:
-        url: EUR-Lex document URL.
-
-    Returns:
-        Parsed Document object.
-    """
-    from .downloading import get_html_content
-
-    soup = get_html_content(url)
-    return extract_from_html(soup, base_url=url)
-
-
-# ---------------------------------------------------------------------------
-# CLI Entry Point
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import json
-
-    # Add parent directory to path for logging_config import
-    _service_root = Path(__file__).resolve().parent.parent
-    if str(_service_root) not in sys.path:
-        sys.path.insert(0, str(_service_root))
-
-    from downloading import get_ai_act_content, get_urls
-
-    from logging_config import configure_logging
-
-    configure_logging(level=logging.DEBUG, log_file="extractor.log")
-    logger.info("Starting EUR-Lex document extraction")
-
-    try:
-        # Fetch AI Act
-        urls = get_urls()
-        logger.info("Fetching EU AI Act from EUR-Lex...")
-        soup = get_ai_act_content()
-
-        # Extract structure
-        logger.info("Extracting document structure...")
-        doc = extract_from_html(soup, base_url=urls["AI_ACT_URL"])
-
-        # Output summary
-        print("\n" + "=" * 60)
-        print(f"Document: {doc.title}")
-        print(f"CELEX: {doc.celex_number}")
-        print("=" * 60)
-        print(f"Recitals: {len(doc.recitals)}")
-        print(f"Chapters: {len(doc.chapters)}")
-        print(f"Standalone Articles: {len(doc.articles)}")
-        print(f"Annexes: {len(doc.annexes)}")
-        print(f"Total Cross-References: {len(doc.all_links)}")
-        print("=" * 60)
-
-        # Link type breakdown
-        link_counts = {}
-        for link in doc.all_links:
-            link_type = link.link_type.value
-            link_counts[link_type] = link_counts.get(link_type, 0) + 1
-
-        print("\nLink Type Breakdown:")
-        for link_type, count in sorted(link_counts.items()):
-            print(f"  {link_type}: {count}")
-
-        # Save to JSON
-        output_path = _service_root / "data" / "ai_act_extracted.json"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with output_path.open("w", encoding="utf-8") as f:
-            json.dump(doc.to_dict(), f, indent=2, ensure_ascii=False)
-
-        logger.info("Saved extraction to %s", output_path)
-        print(f"\nSaved to: {output_path}")
-
-    except Exception as e:
-        logger.exception("Extraction failed: %s", e)
-        sys.exit(1)

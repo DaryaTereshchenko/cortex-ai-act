@@ -86,15 +86,15 @@ def fetch_url(url: str, *, timeout: int = DEFAULT_TIMEOUT) -> Response:
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
-    except requests.exceptions.Timeout:
+    except requests.exceptions.Timeout as e:
         logger.error("Request timed out for URL: %s", url)
-        raise ScrapingError(url, "Request timed out")
+        raise ScrapingError(url, "Request timed out") from e
     except requests.exceptions.ConnectionError as e:
         logger.error("Connection error for URL %s: %s", url, e)
-        raise ScrapingError(url, f"Connection error: {e}")
+        raise ScrapingError(url, f"Connection error: {e}") from e
     except requests.exceptions.HTTPError as e:
         logger.error("HTTP error %d for URL: %s", e.response.status_code, url)
-        raise ScrapingError(url, str(e), status_code=e.response.status_code)
+        raise ScrapingError(url, str(e), status_code=e.response.status_code) from e
 
     logger.debug("Successfully fetched %d bytes from %s", len(response.content), url)
     return response
@@ -126,7 +126,7 @@ def get_html_content(
         soup = BeautifulSoup(response.text, parser)
     except Exception as e:
         logger.error("Failed to parse HTML from %s: %s", url, e)
-        raise ScrapingError(url, f"HTML parsing failed: {e}")
+        raise ScrapingError(url, f"HTML parsing failed: {e}") from e
 
     logger.info("Parsed HTML document from %s (%d elements)", url, len(soup.find_all()))
     return soup
@@ -150,6 +150,7 @@ def get_dsa_content(*, timeout: int = DEFAULT_TIMEOUT) -> BeautifulSoup:
 if __name__ == "__main__":
     # Add parent directory to path for logging_config import
     import sys
+
     _service_root = Path(__file__).resolve().parent.parent
     if str(_service_root) not in sys.path:
         sys.path.insert(0, str(_service_root))
