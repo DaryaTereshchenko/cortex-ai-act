@@ -9,11 +9,11 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     """User's legal query request."""
 
-    question: str = Field(..., min_length=10, max_length=2000, description="Legal compliance question")
+    question: str = Field(
+        ..., min_length=10, max_length=2000, description="Legal compliance question"
+    )
     regulation: str = Field(
-        default="eu_ai_act",
-        pattern="^(eu_ai_act|dsa|both)$",
-        description="Target regulation scope"
+        default="eu_ai_act", pattern="^(eu_ai_act|dsa|both)$", description="Target regulation scope"
     )
     max_hops: int = Field(default=3, ge=1, le=5, description="Max graph traversal depth")
     enable_pruning: bool = Field(default=True, description="Enable semantic entropy pruning")
@@ -27,7 +27,9 @@ class LegalNode(BaseModel):
     node_type: str = Field(..., description="Node type: Article, Recital, Definition, TextChunk")
     content: str = Field(..., description="Full text of the legal article/definition")
     regulation: str = Field(..., description="Source regulation: eu_ai_act or dsa")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata (chapter, section, url)")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata (chapter, section, url)"
+    )
     entropy_score: float | None = Field(default=None, description="Semantic entropy score")
 
 
@@ -58,10 +60,11 @@ class ReasoningStep(BaseModel):
     step_number: int = Field(..., description="Step sequence number")
     agent: str = Field(..., description="Agent performing action: Retriever, Critic, Synthesizer")
     action: str = Field(..., description="Action description")
-    retrieved_nodes: list[str] = Field(default_factory=list, description="Nodes retrieved in this step")
+    retrieved_nodes: list[str] = Field(
+        default_factory=list, description="Nodes retrieved in this step"
+    )
     entropy_reduction: float | None = Field(
-        default=None,
-        description="Percentage of context reduced by pruning"
+        default=None, description="Percentage of context reduced by pruning"
     )
     timestamp: datetime = Field(default_factory=datetime.now, description="Step timestamp")
 
@@ -73,7 +76,9 @@ class QueryResponse(BaseModel):
     status: str = Field(..., description="Query status: processing, completed, failed")
     question: str = Field(..., description="Original user question")
     final_answer: str | None = Field(default=None, description="Generated answer")
-    reasoning_steps: list[ReasoningStep] = Field(default_factory=list, description="Reasoning trace")
+    reasoning_steps: list[ReasoningStep] = Field(
+        default_factory=list, description="Reasoning trace"
+    )
     graph_data: dict[str, Any] = Field(default_factory=dict, description="Graph nodes and edges")
     citations: list[str] = Field(default_factory=list, description="Article citations")
     metrics: dict[str, Any] = Field(default_factory=dict, description="Performance metrics")

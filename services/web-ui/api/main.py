@@ -237,7 +237,9 @@ async def _try_reasoning_engine(
     }
 
     try:
-        response = await app.state.http_client.post(f"{REASONING_ENGINE_URL}/api/reason", json=payload)
+        response = await app.state.http_client.post(
+            f"{REASONING_ENGINE_URL}/api/reason", json=payload
+        )
         if response.status_code >= 400:
             return None
         parsed = response.json()
@@ -259,11 +261,17 @@ def _build_local_fallback_result(
     top_summaries: list[str] = []
     for item in kg_search[:3]:
         result = item.get("result", {})
-        snippet = str(result.get("summary") or result.get("full_text") or result.get("text") or "").strip()
+        snippet = str(
+            result.get("summary") or result.get("full_text") or result.get("text") or ""
+        ).strip()
         if snippet:
             top_summaries.append(snippet[:220])
 
-    summary_text = " ".join(top_summaries) if top_summaries else "No relevant legal summary returned by KG search."
+    summary_text = (
+        " ".join(top_summaries)
+        if top_summaries
+        else "No relevant legal summary returned by KG search."
+    )
     elapsed = (datetime.now() - started).total_seconds()
 
     return {
@@ -422,7 +430,9 @@ async def get_article(regulation: str, number: int) -> dict:
         return response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Article {number} not found in {regulation}") from e
+            raise HTTPException(
+                status_code=404, detail=f"Article {number} not found in {regulation}"
+            ) from e
         raise HTTPException(status_code=503, detail="Knowledge graph service error") from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"{e!s}") from e
@@ -439,7 +449,9 @@ async def get_chapter(regulation: str, number: str) -> dict:
         return response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Chapter {number} not found in {regulation}") from e
+            raise HTTPException(
+                status_code=404, detail=f"Chapter {number} not found in {regulation}"
+            ) from e
         raise HTTPException(status_code=503, detail="Knowledge graph service error") from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"{e!s}") from e

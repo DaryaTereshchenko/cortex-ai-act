@@ -137,7 +137,9 @@ with st.sidebar:
         st.error("❌ API Unreachable")
 
 # Main tabs
-query_tab, browse_tab, history_tab, about_tab = st.tabs(["🔍 Query", "📖 Browse", "📜 History", "i About"])
+query_tab, browse_tab, history_tab, about_tab = st.tabs(
+    ["🔍 Query", "📖 Browse", "📜 History", "i About"]
+)
 
 with query_tab:
     st.subheader("Ask a Regulatory Compliance Question")
@@ -226,9 +228,7 @@ with query_tab:
                             col1, col2, col3, col4 = st.columns(4)
 
                             with col1:
-                                st.metric(
-                                    "Reasoning Steps", len(result.get("reasoning_steps", []))
-                                )
+                                st.metric("Reasoning Steps", len(result.get("reasoning_steps", [])))
 
                             with col2:
                                 reduction = metrics.get("entropy_reduction", 0)
@@ -266,9 +266,7 @@ with query_tab:
                             break
 
                         elif result["status"] == "failed":
-                            st.error(
-                                f"❌ Query failed: {result.get('error', 'Unknown error')}"
-                            )
+                            st.error(f"❌ Query failed: {result.get('error', 'Unknown error')}")
                             break
 
                         else:
@@ -344,7 +342,9 @@ with browse_tab:
                     if chapter.get("children"):
                         st.write("**Articles in Chapter:**")
                         for child in chapter["children"]:
-                            st.write(f"  - Article {child.get('number')}: {child.get('title', 'N/A')}")
+                            st.write(
+                                f"  - Article {child.get('number')}: {child.get('title', 'N/A')}"
+                            )
                 else:
                     st.error(f"Chapter not found (Status: {response.status_code})")
 
@@ -366,7 +366,9 @@ with browse_tab:
             if response.status_code == 200:
                 recitals = response.json()
                 for recital in recitals[:20]:
-                    st.write(f"**Recital {recital.get('number')}:** {recital.get('text', 'N/A')[:150]}...")
+                    st.write(
+                        f"**Recital {recital.get('number')}:** {recital.get('text', 'N/A')[:150]}..."
+                    )
             else:
                 st.error("Failed to load recitals")
 
