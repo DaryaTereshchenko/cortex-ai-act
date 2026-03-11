@@ -18,9 +18,7 @@ class KGConnector:
     def search_nodes(query: str) -> list[dict]:
         """Initial search: Finds the best starting points."""
         try:
-            resp = requests.get(
-                f"{KGConnector.BASE_URL}/search", params={"q": query, "limit": 5}
-            )
+            resp = requests.get(f"{KGConnector.BASE_URL}/search", params={"q": query, "limit": 5})
             if resp.status_code == 200:
                 nodes = []
                 for r in resp.json():
@@ -29,9 +27,7 @@ class KGConnector:
                         {
                             "id": node_data["id"],
                             "node_type": r["label"],
-                            "content": node_data.get("full_text")
-                            or node_data.get("text")
-                            or "",
+                            "content": node_data.get("full_text") or node_data.get("text") or "",
                             "regulation": node_data.get("regulation"),
                             "metadata": {"score": r["score"]},
                             "entropy_score": None,
@@ -46,9 +42,7 @@ class KGConnector:
     def get_neighbors(node_id: str) -> list[dict]:
         """RE-TRAVERSAL: Grabs connected nodes (Recitals, Definitions, etc.)."""
         try:
-            resp = requests.get(
-                f"{KGConnector.BASE_URL}/traverse/{node_id}", params={"depth": 1}
-            )
+            resp = requests.get(f"{KGConnector.BASE_URL}/traverse/{node_id}", params={"depth": 1})
             if resp.status_code == 200:
                 data = resp.json()
                 neighbors = []
@@ -109,12 +103,8 @@ def run_cortex_engine(user_query: str):
         global_kept_chars += hop_kept_chars
 
         # 4. Update Cumulative Metrics
-        state["metrics"]["tokens_saved"] += max(
-            0, (hop_raw_chars - hop_kept_chars) // 4
-        )
-        state["metrics"]["nodes_pruned"] += initial_node_count - len(
-            state["pruned_context"]
-        )
+        state["metrics"]["tokens_saved"] += max(0, (hop_raw_chars - hop_kept_chars) // 4)
+        state["metrics"]["nodes_pruned"] += initial_node_count - len(state["pruned_context"])
 
         # 5. Innovation 2: Critic Audit
         state = critic_node(state)
@@ -137,9 +127,7 @@ def run_cortex_engine(user_query: str):
     # --- FINAL METRICS CALCULATION ---
     reduction_ratio = 0.0
     if global_raw_chars > 0:
-        reduction_ratio = float(
-            round((global_raw_chars - global_kept_chars) / global_raw_chars, 3)
-        )
+        reduction_ratio = float(round((global_raw_chars - global_kept_chars) / global_raw_chars, 3))
 
     reduction_ratio = max(0.0, min(1.0, reduction_ratio))
     state["metrics"]["entropy_reduction"] = reduction_ratio

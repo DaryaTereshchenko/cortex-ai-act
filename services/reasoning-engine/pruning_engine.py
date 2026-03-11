@@ -65,9 +65,7 @@ def pruning_node(state: GraphState, model, tokenizer, threshold=0.35) -> GraphSt
             candidate["kl_score"] = info_gain
             pruned_context.append(candidate)
         else:
-            print(
-                f"   🗑️ Pruned {candidate['id']} (Low Information Gain: {info_gain:.4f})"
-            )
+            print(f"   🗑️ Pruned {candidate['id']} (Low Information Gain: {info_gain:.4f})")
 
     print(f"KL Pruning complete. Kept {len(pruned_context)}/{len(raw_nodes)} nodes.")
     state["pruned_context"] = pruned_context
