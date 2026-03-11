@@ -1,54 +1,26 @@
-from typing import TypedDict
+from typing import TypedDict, Optional, List, Dict, Any
 
-
-# Matches the KG Lead's Node Properties (Regulation, Chapter, Article, etc.)
 class LegalNode(TypedDict):
-    id: str  # e.g., "ai_act_art_6"
-    node_type: str  # "Article", "Recital", "Definition", "TextChunk"
-    content: str  # The 'full_text' or 'definition_text'
-    regulation: str  # "eu_ai_act" or "dsa"
-    metadata: dict  # {"chapter": "III", "section": "1", "url": "..."}
-    entropy_score: float | None
-
+    id: str         # e.g., "eu_ai_act_art_6"
+    node_type: str  # "Article", "Recital", "Definition", "Paragraph"
+    content: str    # Maps to 'full_text' or 'text'
+    regulation: str # "eu_ai_act" or "dsa"
+    metadata: Dict[str, Any] # {"chapter": "III", "section": "1", "score": 0.95}
+    entropy_score: Optional[float]
+    kl_score: Optional[float]  # <--- NEW: Added for Innovation 1 (KL Divergence)
 
 class GraphState(TypedDict):
-    query: str  # User's natural language question
-    cypher_intent: dict  # The 'Search Strategy' for the Graph Lead
-    retrieved_nodes: list[LegalNode]
-    links_found: list[dict]  # Relationships like :INTERPRETS or :OVERLAPS_WITH
-    pruned_context: list[LegalNode]
+    query: str
+    cypher_intent: Dict[str, Any]
+    retrieved_nodes: List[LegalNode]
+    links_found: List[Dict[str, Any]]
+    pruned_context: List[LegalNode]
+    reasoning_trace: List[str]
     final_answer: str
     hops: int
     is_accurate: bool
+    # IMPORTANT: We keep 'metrics' here so the main_orchestrator can 
+    # record the "Sustainability" results for your scientific paper.
+    metrics: Dict[str, Any] 
 
-
-# --- ENRICHED MOCK DATA ---
-# This simulates the hierarchical nodes your colleague will provide
-mock_retrieved_nodes = [
-    {
-        "id": "ai_act_art_6",
-        "node_type": "Article",
-        "content": "Classification rules for high-risk AI systems...",
-        "regulation": "eu_ai_act",
-        "metadata": {"chapter": "III"},
-        "entropy_score": None,
-    },
-    {
-        "id": "ai_act_art_3_1",
-        "node_type": "Definition",
-        "content": "AI system means a machine-based system...",
-        "regulation": "eu_ai_act",
-        "metadata": {"source": "Article 3"},
-        "entropy_score": None,
-    },
-    {
-        "id": "dsa_art_34",
-        "node_type": "Article",
-        "content": "Providers of VLOPs shall identify systemic risks...",
-        "regulation": "dsa",
-        "metadata": {"chapter": "V"},
-        "entropy_score": None,
-    },
-]
-
-print("Step 1 (v2) Complete: Enriched Hierarchical Schema Defined.")
+mock_retrieved_nodes = [] # Kept for failover as requested
