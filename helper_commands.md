@@ -21,3 +21,9 @@ python -m streamlit run app.py
 To open user dashboard
 cd C:\Users\Samsa\.vscode\coding\cortex-ai-act\services\web-ui
 python -m streamlit run app.py --server.port 8502
+
+RUFF
+python -m ruff check services/reasoning-engine --fix
+
+BLACK
+python -m black services/reasoning-engine
