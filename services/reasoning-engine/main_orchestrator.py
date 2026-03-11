@@ -1,122 +1,171 @@
-from critic_engine import self_correction_router
+import time
+from datetime import datetime
+
+import requests
+
+from critic_engine import critic_node, self_correction_router
 from engine_schema import GraphState, mock_retrieved_nodes
 from pruning_engine import pruning_node
+from synthesis_engine import (
+    synthesis_node,
+)  # <--- NEW: Import the logic-based synthesizer
 
 
-# --- Updated Pre-Retrieval (The 'Cypher' Simulator) ---
-def pre_retrieval_optimizer(query: str) -> dict:
-    """
-    PRE-RETRIEVAL: Now generates a 'Search Strategy' instead of just a string.
-    This tells the KG Lead what logic we want to traverse.
-    """
-    print("--- PRE-RETRIEVAL: Generating Cypher Logic ---")
-    return {
-        "original_query": query,
-        "cypher_intent": "MATCH (a:Article)-[:USES_TERM]->(d:Definition) WHERE a.full_text CONTAINS 'high-risk' RETURN a, d",
-        "depth": 2,
-    }
+class KGConnector:
+    BASE_URL = "http://localhost:8001/graph"
 
+    @staticmethod
+    def search_nodes(query: str) -> list[dict]:
+        """Initial search: Finds the best starting points."""
+        try:
+            resp = requests.get(f"{KGConnector.BASE_URL}/search", params={"q": query, "limit": 5})
+            if resp.status_code == 200:
+                nodes = []
+                for r in resp.json():
+                    node_data = r["result"]
+                    nodes.append(
+                        {
+                            "id": node_data["id"],
+                            "node_type": r["label"],
+                            "content": node_data.get("full_text") or node_data.get("text") or "",
+                            "regulation": node_data.get("regulation"),
+                            "metadata": {"score": r["score"]},
+                            "entropy_score": None,
+                        }
+                    )
+                return nodes
+        except Exception as e:
+            print(f"Connection to KG failed: {e}")
+        return mock_retrieved_nodes
 
-# --- Updated Post-Retrieval Reranker ---
-def post_retrieval_reranker(nodes: list) -> list:
-    print(f"--- POST-RETRIEVAL: Re-ranking {len(nodes)} nodes ---")
-    return sorted(nodes, key=lambda x: x.get("entropy_score", 0))
-
-
-# --- Updated Critic (The 'Structural' Audit) ---
-def critic_node(state: GraphState) -> GraphState:
-    """
-    Innovation 2: Audits the hierarchy based on the KG Plan (Phase 4.2).
-    Checks for interpretive links (Recitals) and definitional links.
-    """
-    print(f"--- CRITIC: Structural Audit (Hop {state['hops']}) ---")
-    context_ids = [n["id"] for n in state["retrieved_nodes"]]
-
-    # Check 1: Article-to-Recital Interpretive Gap
-    # If we have Art 6, we MUST have Recital 53 to understand 'intent'
-    if "ai_act_art_6" in context_ids and "ai_act_rec_53" not in context_ids:
-        print("Critic Alert: Missing interpretive Recital 53 for Article 6.")
-        state["is_accurate"] = False
-        state["hops"] += 1
-    else:
-        state["is_accurate"] = True
-    return state
-
-
-# --- FINALIZED REASONING ENGINE ---
+    @staticmethod
+    def get_neighbors(node_id: str) -> list[dict]:
+        """RE-TRAVERSAL: Grabs connected nodes (Recitals, Definitions, etc.)."""
+        try:
+            resp = requests.get(f"{KGConnector.BASE_URL}/traverse/{node_id}", params={"depth": 1})
+            if resp.status_code == 200:
+                data = resp.json()
+                neighbors = []
+                for n in data.get("neighbors", []):
+                    neighbors.append(
+                        {
+                            "id": n["id"],
+                            "node_type": n["label"],
+                            "content": n.get("title") or n.get("id"),
+                            "regulation": n.get("id", "").split("_")[0],
+                            "metadata": {"parent": node_id},
+                            "entropy_score": None,
+                        }
+                    )
+                return neighbors
+        except Exception as e:
+            print(f"Traversal failed: {e}")
+        return []
 
 
 def run_cortex_engine(user_query: str):
-    # 1. PRE-RETRIEVAL Optimization
-    search_strategy = pre_retrieval_optimizer(user_query)
+    start_time = time.time()
+
+    # Global Sustainability Trackers
+    global_raw_chars = 0
+    global_kept_chars = 0
 
     state: GraphState = {
         "query": user_query,
-        "cypher_intent": search_strategy,
-        "retrieved_nodes": mock_retrieved_nodes.copy(),
+        "cypher_intent": {},
+        "retrieved_nodes": KGConnector.search_nodes(user_query),
         "links_found": [],
         "pruned_context": [],
+        "reasoning_trace": [f"🚀 Query received: {user_query}"],
         "final_answer": "",
         "hops": 0,
         "is_accurate": False,
-    }
-
-    print(f"🚀 CORTEX-RAG v2: Processing '{user_query}'")
-
-    while state["hops"] < 3:
-        # 2. PRUNING (Innovation 1)
-        # We now prune nodes from 'retrieved_nodes'
-        state = pruning_node(state, model=None, tokenizer=None)
-
-        # 3. RE-RANKING
-        state["pruned_context"] = post_retrieval_reranker(state["pruned_context"])
-
-        # 4. CRITIC (Structural Audit)
-        state = critic_node(state)
-
-        next_step = self_correction_router(state)
-
-        if next_step == "generate_final_answer":
-            break
-        else:
-            print("🔄 Re-traversing Graph for missing hierarchy...")
-            # Simulate KG Lead's :INTERPRETS relationship
-            state["retrieved_nodes"].append(
-                {
-                    "id": "ai_act_rec_53",
-                    "node_type": "Recital",
-                    "content": "Recital 53: Explains legislative intent for high-risk rules...",
-                    "regulation": "eu_ai_act",
-                    "metadata": {"interprets": "ai_act_art_6"},
-                    "entropy_score": None,
-                }
-            )
-
-    # 5. FINAL SYNTHESIS
-    state["final_answer"] = "Final answer based on Article 6 and its interpretive Recital 53..."
-
-    # --- API CONTRACT OUTPUT ---
-    initial_count = len(state["retrieved_nodes"])
-    final_count = len(state["pruned_context"])
-    reduction_pct = ((initial_count - final_count) / initial_count) * 100
-
-    api_output = {
-        "final_answer": state["final_answer"],
-        "citations": [n["id"] for n in state["pruned_context"]],
         "metrics": {
-            "total_hops": state["hops"],
-            "entropy_pruning_pct": f"{reduction_pct:.2f}%",
-            "cross_regulatory_active": any(
-                n["regulation"] == "dsa" for n in state["pruned_context"]
-            ),
+            "tokens_saved": 0,
+            "entropy_reduction": 0.0,
+            "nodes_pruned": 0,
+            "latency_seconds": 0.0,
         },
     }
 
-    print(
-        f"✅ ENGINE FINISHED. Sustainability: {api_output['metrics']['entropy_pruning_pct']} saved."
-    )
-    return api_output
+    # --- AGENTIC LOOP ---
+    while state["hops"] < 3:
+        # 1. Capture Encountered volume
+        hop_raw_chars = sum(len(n.get("content", "")) for n in state["retrieved_nodes"])
+        global_raw_chars += hop_raw_chars
+        initial_node_count = len(state["retrieved_nodes"])
+
+        # 2. Innovation 1: Semantic Pruning
+        state = pruning_node(state, model=None, tokenizer=None)
+
+        # 3. Capture Accepted volume
+        hop_kept_chars = sum(len(n.get("content", "")) for n in state["pruned_context"])
+        global_kept_chars += hop_kept_chars
+
+        # 4. Update Cumulative Metrics
+        state["metrics"]["tokens_saved"] += max(0, (hop_raw_chars - hop_kept_chars) // 4)
+        state["metrics"]["nodes_pruned"] += initial_node_count - len(state["pruned_context"])
+
+        # 5. Innovation 2: Critic Audit
+        state = critic_node(state)
+
+        if self_correction_router(state) == "generate_final_answer":
+            break
+
+        if not state["pruned_context"]:
+            state["reasoning_trace"].append("⚠️ Logic Halt: No context remained.")
+            break
+
+        # 6. Re-traversal
+        target_node = state["pruned_context"][0]["id"]
+        state["reasoning_trace"].append(f"🔄 Re-traversing graph from {target_node}...")
+
+        new_nodes = KGConnector.get_neighbors(target_node)
+        state["retrieved_nodes"].extend(new_nodes)
+        state["hops"] += 1
+
+    # --- FINAL METRICS CALCULATION ---
+    reduction_ratio = 0.0
+    if global_raw_chars > 0:
+        reduction_ratio = float(round((global_raw_chars - global_kept_chars) / global_raw_chars, 3))
+
+    reduction_ratio = max(0.0, min(1.0, reduction_ratio))
+    state["metrics"]["entropy_reduction"] = reduction_ratio
+    state["metrics"]["latency_seconds"] = round(time.time() - start_time, 2)
+
+    # --- INNOVATION 3: SYNTHESIS ---
+    # This transforms state["final_answer"] from a placeholder to a detailed response
+    state = synthesis_node(state)
+
+    # --- SCHEMA HANDSHAKE FORMATTING ---
+    formatted_steps = []
+    for i, step in enumerate(state["reasoning_trace"]):
+        formatted_steps.append(
+            {
+                "step_number": int(i + 1),
+                "agent": "Cortex",
+                "action": str(step),
+                "retrieved_nodes": [str(n["id"]) for n in state["pruned_context"]],
+                "entropy_reduction": 0.0,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    # Return structure mapped for Colleague's Gateway
+    return {
+        "final_answer": str(state["final_answer"]),
+        "reasoning_steps": formatted_steps,
+        "metrics": {
+            "reasoning_steps": len(formatted_steps),
+            "tokens_saved": int(state["metrics"]["tokens_saved"]),
+            "nodes_pruned": int(state["metrics"]["nodes_pruned"]),
+            "latency_seconds": float(state["metrics"]["latency_seconds"]),
+            "entropy_reduction": float(reduction_ratio),
+        },
+    }
 
 
 if __name__ == "__main__":
-    run_cortex_engine("What are the rules for high-risk systems?")
+    res = run_cortex_engine("Final System Test with Synthesis")
+    print(f"✅ Final Result Metrics: {res['metrics']}")
+    print(f"✅ Final Answer Snippet: {res['final_answer'][:100]}...")

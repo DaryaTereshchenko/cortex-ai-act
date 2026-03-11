@@ -110,7 +110,7 @@ class GraphBuilder:
     # -- private pipeline -----------------------------------------------------
 
     def _ingest_file(self, path: Path) -> dict[str, Any]:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         doc_type = data["document_type"]
