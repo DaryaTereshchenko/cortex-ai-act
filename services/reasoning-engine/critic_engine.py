@@ -1,49 +1,44 @@
 from engine_schema import GraphState
 
+# --- INNOVATION 2: STRUCTURAL AUDIT & AGENTIC SELF-CORRECTION ---
 
 def critic_node(state: GraphState) -> GraphState:
-    """Innovation 2: Structural Audit based on official KG ID patterns and cross-reg overlaps."""
-    print(f"--- CRITIC: Structural Audit (Hop {state['hops']}) ---")
+    """
+    Innovation 2: Structural Audit
+    Validates if the pruned context meets minimum legal requirements 
+    for an accurate response.
+    """
+    print(f"--- CRITIC: Semantic Validation (Hop {state['hops']}) ---")
 
-    # 1. Gather context for checking
     context_ids = [node["id"] for node in state["pruned_context"]]
     context_text = " ".join([node["content"] for node in state["pruned_context"]]).lower()
+    missing_requirements = []
 
-    missing_dependencies = []
+    # Check 1: Article/Recital Balance
+    # High-quality legal RAG requires both the rule (Article) and the intent (Recital).
+    has_article = any("_art_" in cid for cid in context_ids)
+    has_recital = any("_rec_" in cid for cid in context_ids)
+    
+    if has_article and not has_recital:
+        missing_requirements.append("Interpretive Recitals")
 
-    # RULE 1: Hierarchical Dependency (EU AI Act Art 6 -> Recital 53)
-    # The Builder uses the pattern: {reg_id}_art_{number}
-    if "eu_ai_act_art_6" in context_ids and "eu_ai_act_rec_53" not in context_ids:
-        missing_dependencies.append("eu_ai_act_rec_53 (Interpretive Recital)")
+    # Check 2: Key Term Coverage
+    # Ensures specific high-stakes terms in the query are supported in the context.
+    important_terms = ["biometric", "risk", "compliance", "vetted"]
+    for term in important_terms:
+        if term in state["query"].lower() and term not in context_text:
+            missing_requirements.append(f"Technical context for '{term}'")
 
-    # RULE 2: Thematic Cross-Regulation Overlap (AI Act Art 9 -> DSA Art 34)
-    # If the user is asking about 'risk management' or Art 9, the Critic suggests the DSA counterpart.
-    is_risk_query = "eu_ai_act_art_9" in context_ids or "risk management" in context_text
-    if is_risk_query and "dsa_art_34" not in context_ids:
-        state["reasoning_trace"].append(
-            "Critic: Detected Risk Management focus. Ensuring DSA Article 34 is included."
-        )
-        missing_dependencies.append("dsa_art_34 (Risk Assessment Overlap)")
-
-    # RULE 3: Definitional Check (High-risk AI -> Article 3 Definitions)
-    # If 'high-risk' is discussed but no definitions are present.
-    if "high-risk" in context_text and not any("_def_" in cid for cid in context_ids):
-        missing_dependencies.append("eu_ai_act_art_3 (Definitions)")
-
-    # --- Update State ---
-    if missing_dependencies and state["hops"] < 3:
-        msg = f"Audit flagged missing dependencies: {missing_dependencies}"
+    if missing_requirements and state["hops"] < 3:
+        msg = f"Validation flagged missing context: {missing_requirements}"
         print(f"⚠️ {msg}")
         state["is_accurate"] = False
-        # Note: hops incrementing is now handled in the orchestrator loop to avoid double-counting
         state["reasoning_trace"].append(msg)
     else:
         state["is_accurate"] = True
-        state["reasoning_trace"].append("Critic: Legal hierarchy and cross-references verified.")
+        state["reasoning_trace"].append("Critic: Context coverage verified for final synthesis.")
 
     return state
 
-
 def self_correction_router(state: GraphState):
-    """The conditional router for the LangGraph flow."""
     return "generate_final_answer" if state["is_accurate"] else "re_traverse_graph"
