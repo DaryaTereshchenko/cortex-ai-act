@@ -1,12 +1,14 @@
 from typing import Any, TypedDict
 
+
 class LegalNode(TypedDict):
-    id: str  
-    node_type: str  
-    content: str  
-    regulation: str  
-    metadata: dict[str, Any]  
-    similarity_score: float | None 
+    id: str
+    node_type: str
+    content: str
+    regulation: str
+    metadata: dict[str, Any]
+    similarity_score: float | None
+
 
 class GraphState(TypedDict):
     query: str
@@ -19,5 +21,6 @@ class GraphState(TypedDict):
     hops: int
     is_accurate: bool
     metrics: dict[str, Any]
+
 
 mock_retrieved_nodes = []

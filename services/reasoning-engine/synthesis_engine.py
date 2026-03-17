@@ -2,6 +2,7 @@ from engine_schema import GraphState
 
 # --- INNOVATION 3: CONTEXT-AWARE SYNTHESIS ---
 
+
 def synthesis_node(state: GraphState) -> GraphState:
     """
     Innovation 3: Context-Aware Synthesis:
@@ -15,7 +16,7 @@ def synthesis_node(state: GraphState) -> GraphState:
 
     top_nodes = state["pruned_context"][:3]
     intro = f"Analysis based on optimized {state['retrieved_nodes'][0]['regulation'].upper()} context:\n"
-    
+
     body_parts = []
     for node in top_nodes:
         snippet = node["content"][:1000].strip() + "..."
@@ -26,5 +27,7 @@ def synthesis_node(state: GraphState) -> GraphState:
     conclusion = f"\n\nContext optimized for high-fidelity response. (Efficiency Gain: {optimization_val:.1f}%)"
 
     state["final_answer"] = intro + "\n".join(body_parts) + conclusion
-    state["reasoning_trace"].append("Synthesizer: Response generated from semantically optimized context.")
+    state["reasoning_trace"].append(
+        "Synthesizer: Response generated from semantically optimized context."
+    )
     return state

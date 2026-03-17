@@ -28,5 +28,9 @@ python -m ruff check services/reasoning-engine --fix
 BLACK
 python -m black services/reasoning-engine
 
+python -m ruff check . --fix
+python -m ruff format .
+python -m black .
+
 Naive Rag:
 python "C:\Users\Samsa\.vscode\coding\cortex-ai-act\baselines\naive_baseline.py"

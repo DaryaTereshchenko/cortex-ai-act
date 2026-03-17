@@ -52,7 +52,10 @@ class KGConnector:
                         {
                             "id": n["id"],
                             "node_type": n["label"],
-                            "content": n.get("full_text") or n.get("text") or n.get("title") or n.get("id"),
+                            "content": n.get("full_text")
+                            or n.get("text")
+                            or n.get("title")
+                            or n.get("id"),
                             "regulation": n.get("id", "").split("_")[0],
                             "metadata": {"parent": node_id},
                             "similarity_score": None,

@@ -13,7 +13,9 @@ class QueryRequest(BaseModel):
         ..., min_length=10, max_length=2000, description="Legal compliance question"
     )
     regulation: str = Field(
-        default="eu_ai_act", pattern="^(eu_ai_act|dsa|both)$", description="Target regulation scope"
+        default="eu_ai_act",
+        pattern="^(eu_ai_act|dsa|both)$",
+        description="Target regulation scope",
     )
     max_hops: int = Field(default=3, ge=1, le=5, description="Max graph traversal depth")
     enable_pruning: bool = Field(default=True, description="Enable semantic entropy pruning")
