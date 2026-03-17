@@ -86,26 +86,22 @@ async def ingest(req: IngestRequest) -> dict:
 async def graph_stats() -> dict:
     conn = _get_conn()
     # Node counts by label
-    labels_result = conn.execute_read(
-        """
+    labels_result = conn.execute_read("""
         CALL db.labels() YIELD label
         CALL apoc.cypher.run('MATCH (n:`' + label + '`) RETURN count(n) AS cnt', {})
         YIELD value
         RETURN label, value.cnt AS count
-        """
-    )
+        """)
     node_counts = {r["label"]: r["count"] for r in labels_result}
 
     # Relationship counts
-    rel_result = conn.execute_read(
-        """
+    rel_result = conn.execute_read("""
         CALL db.relationshipTypes() YIELD relationshipType AS type
         CALL apoc.cypher.run(
             'MATCH ()-[r:`' + type + '`]->() RETURN count(r) AS cnt', {}
         ) YIELD value
         RETURN type, value.cnt AS count
-        """
-    )
+        """)
     rel_counts = {r["type"]: r["count"] for r in rel_result}
 
     return {"nodes": node_counts, "relationships": rel_counts}
@@ -114,22 +110,18 @@ async def graph_stats() -> dict:
 @router.get("/stats/simple", summary="Simple graph statistics (no APOC)")
 async def graph_stats_simple() -> dict:
     conn = _get_conn()
-    result = conn.execute_read(
-        """
+    result = conn.execute_read("""
         MATCH (n)
         WITH labels(n) AS lbls, count(n) AS cnt
         UNWIND lbls AS label
         RETURN label, sum(cnt) AS count
-        """
-    )
+        """)
     node_counts = {r["label"]: r["count"] for r in result}
 
-    rel_result = conn.execute_read(
-        """
+    rel_result = conn.execute_read("""
         MATCH ()-[r]->()
         RETURN type(r) AS type, count(r) AS count
-        """
-    )
+        """)
     rel_counts = {r["type"]: r["count"] for r in rel_result}
 
     return {"nodes": node_counts, "relationships": rel_counts}
@@ -138,13 +130,11 @@ async def graph_stats_simple() -> dict:
 @router.get("/regulations", summary="List all regulations")
 async def list_regulations() -> list[dict]:
     conn = _get_conn()
-    return conn.execute_read(
-        """
+    return conn.execute_read("""
         MATCH (r:Regulation)
         RETURN r {.*} AS regulation
         ORDER BY r.id
-        """
-    )
+        """)
 
 
 @router.get(

@@ -223,9 +223,11 @@ def build_graph_from_view(view_key: str) -> tuple[list[Node], list[Edge]]:
             Edge(
                 source=src,
                 target=tgt,
-                label=rel
-                if rel in ("OVERLAPS", "SIMILAR_TERM", "REFERENCES", "RELATED_REGULATION")
-                else "",
+                label=(
+                    rel
+                    if rel in ("OVERLAPS", "SIMILAR_TERM", "REFERENCES", "RELATED_REGULATION")
+                    else ""
+                ),
                 color=_EDGE_COLORS.get(rel, "#666"),
                 width=3 if rel in ("OVERLAPS", "SIMILAR_TERM") else 1,
             )

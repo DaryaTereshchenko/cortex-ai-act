@@ -145,15 +145,13 @@ with query_tab:
     st.subheader("Ask a Regulatory Compliance Question")
 
     with st.expander("💡 Example Questions"):
-        st.markdown(
-            """
+        st.markdown("""
             - What are the obligations for providers of high-risk AI systems?
             - How does the AI Act's transparency requirement overlap with DSA?
             - What is the definition of 'systemic risk' in both regulations?
             - Which AI systems are explicitly prohibited under Article 5?
             - What are the conformity assessment procedures?
-            """
-        )
+            """)
 
     user_question = st.text_area(
         "Your Question",
@@ -228,7 +226,10 @@ with query_tab:
                             col1, col2, col3, col4 = st.columns(4)
 
                             with col1:
-                                st.metric("Reasoning Steps", len(result.get("reasoning_steps", [])))
+                                st.metric(
+                                    "Reasoning Steps",
+                                    len(result.get("reasoning_steps", [])),
+                                )
 
                             with col2:
                                 reduction = metrics.get("entropy_reduction", 0)
@@ -290,7 +291,14 @@ with browse_tab:
 
     browse_section = st.selectbox(
         "Select Section",
-        options=["Regulations", "Articles", "Chapters", "Definitions", "Recitals", "Annexes"],
+        options=[
+            "Regulations",
+            "Articles",
+            "Chapters",
+            "Definitions",
+            "Recitals",
+            "Annexes",
+        ],
     )
 
     try:
@@ -312,7 +320,8 @@ with browse_tab:
 
             if st.button("📄 Load Article"):
                 response = requests.get(
-                    f"{API_BASE_URL}/article/{reg_select}/{int(article_num)}", timeout=10
+                    f"{API_BASE_URL}/article/{reg_select}/{int(article_num)}",
+                    timeout=10,
                 )
                 if response.status_code == 200:
                     article = response.json()
@@ -400,8 +409,7 @@ with history_tab:
                     st.write(f"**Answer Preview:** {query['final_answer'][:150]}...")
 
 with about_tab:
-    st.markdown(
-        """
+    st.markdown("""
         ## About CORTEX-RAG
 
         **CORTEX-RAG** is a High-Precision Regulatory Discovery System for navigating
@@ -433,5 +441,4 @@ with about_tab:
         ---
 
         *Built with ⚡ for digital sustainability and regulatory compliance*
-        """
-    )
+        """)

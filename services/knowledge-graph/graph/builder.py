@@ -1063,7 +1063,10 @@ class GraphBuilder:
         (
             "provider_obligations",
             [
-                ("16", "11"),  # High-risk AI providers / Intermediary service obligations
+                (
+                    "16",
+                    "11",
+                ),  # High-risk AI providers / Intermediary service obligations
                 ("16", "13"),  # High-risk AI providers / Hosting provider obligations
                 ("17", "12"),  # Quality management / Points of contact
                 ("16", "16"),  # Provider notification duties
@@ -1135,14 +1138,12 @@ class GraphBuilder:
         counters = {"reg_links": 0, "article_overlaps": 0, "def_links": 0}
 
         # 1. Link regulations to each other
-        self.conn.execute_write(
-            """
+        self.conn.execute_write("""
             MATCH (a:Regulation), (b:Regulation)
             WHERE a.id < b.id
             MERGE (a)-[:RELATED_REGULATION]->(b)
             MERGE (b)-[:RELATED_REGULATION]->(a)
-            """
-        )
+            """)
         reg_count = self.conn.execute_read("MATCH (r:Regulation) RETURN count(r) AS c")
         n = reg_count[0]["c"] if reg_count else 0
         counters["reg_links"] = n * (n - 1) if n > 1 else 0
