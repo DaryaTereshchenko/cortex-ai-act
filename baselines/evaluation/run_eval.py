@@ -31,6 +31,8 @@ MODEL_DISPLAY_NAMES = {
     "BM25": "BM25 (rank_bm25 lexical baseline)",
     "Dense": "Dense Embedding (all-MiniLM-L6-v2 semantic retrieval baseline)",
     "Advanced": "Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",
+    "Cortex_Pruner_Only": "Cortex Pruner Only (pruning=on, critic=off)",
+    "Cortex_Critic_Only": "Cortex Critic Only (pruning=off, critic=on)",
     "Cortex": "Cortex Main (CORTEX pipeline; pruning=on, critic=on)",
 }
 
@@ -314,6 +316,7 @@ def run_advanced(
     max_hops: int,
     enable_pruning: bool,
     enable_self_correction: bool,
+    pruning_threshold: float,
 ) -> ModelOutput:
     result = run_advanced_query(
         question,
@@ -322,6 +325,7 @@ def run_advanced(
         max_hops=max_hops,
         enable_pruning=enable_pruning,
         enable_self_correction=enable_self_correction,
+        pruning_threshold=pruning_threshold,
         poll_interval_seconds=1.0,
         timeout_seconds=240.0,
     )
@@ -346,10 +350,17 @@ def main() -> None:
     parser.add_argument("--artifact-dir", default="artifacts/eval")
     parser.add_argument("--judge-model", default="gpt-4o-mini")
     parser.add_argument(
+        "--pruning-threshold",
+        type=float,
+        default=0.45,
+        help="Pruning threshold for profiles that enable pruning (0.0-1.0)",
+    )
+    parser.add_argument(
         "--models",
         default="naive,advanced,cortex",
         help=(
-            "Comma list from: naive,bm25,dense,advanced,cortex "
+            "Comma list from: naive,bm25,dense,advanced,"
+            "cortex-pruner-only,cortex-critic-only,cortex "
             "(challenger alias -> advanced)"
         ),
     )
@@ -360,7 +371,15 @@ def main() -> None:
         selected_models.remove("challenger")
         selected_models.add("advanced")
 
-    valid = {"naive", "bm25", "dense", "advanced", "cortex"}
+    valid = {
+        "naive",
+        "bm25",
+        "dense",
+        "advanced",
+        "cortex-pruner-only",
+        "cortex-critic-only",
+        "cortex",
+    }
     unknown = selected_models.difference(valid)
     if unknown:
         raise ValueError(f"Unknown model(s): {sorted(unknown)}")
@@ -456,6 +475,7 @@ def main() -> None:
                 max_hops=3,
                 enable_pruning=False,
                 enable_self_correction=False,
+                pruning_threshold=args.pruning_threshold,
             )
             out_row["Advanced_Response"] = advanced.response
             out_row["Advanced_Retrieved_IDs"] = json.dumps(advanced.retrieved_ids)
@@ -475,6 +495,70 @@ def main() -> None:
                 judge_model=args.judge_model,
             )
 
+        if "cortex-pruner-only" in selected_models:
+            cortex_pruner_only = run_advanced(
+                question=question,
+                api_base_url=args.api_base_url.rstrip("/"),
+                regulation=regulation,
+                max_hops=3,
+                enable_pruning=True,
+                enable_self_correction=False,
+                pruning_threshold=args.pruning_threshold,
+            )
+            out_row["Cortex_Pruner_Only_Response"] = cortex_pruner_only.response
+            out_row["Cortex_Pruner_Only_Retrieved_IDs"] = json.dumps(
+                cortex_pruner_only.retrieved_ids
+            )
+            out_row["Cortex_Pruner_Only_Retrieved_Context"] = cortex_pruner_only.retrieved_context
+            out_row["Cortex_Pruner_Only_Status"] = cortex_pruner_only.status
+            out_row["Cortex_Pruner_Only_Error"] = cortex_pruner_only.error
+            out_row["Cortex_Pruner_Only_Context_Tokens"] = context_token_count(
+                cortex_pruner_only.retrieved_context
+            )
+
+            p, r = precision_recall(cortex_pruner_only.retrieved_ids, gold_ids)
+            out_row["Cortex_Pruner_Only_Precision"] = p
+            out_row["Cortex_Pruner_Only_Recall"] = r
+            out_row["Cortex_Pruner_Only_EM"] = exact_match(cortex_pruner_only.response, expected)
+            out_row["Cortex_Pruner_Only_F1"] = f1_score(cortex_pruner_only.response, expected)
+            out_row["Cortex_Pruner_Only_Faithfulness"] = score_faithfulness_with_judge(
+                retrieved_context=cortex_pruner_only.retrieved_context,
+                response=cortex_pruner_only.response,
+                judge_model=args.judge_model,
+            )
+
+        if "cortex-critic-only" in selected_models:
+            cortex_critic_only = run_advanced(
+                question=question,
+                api_base_url=args.api_base_url.rstrip("/"),
+                regulation=regulation,
+                max_hops=3,
+                enable_pruning=False,
+                enable_self_correction=True,
+                pruning_threshold=args.pruning_threshold,
+            )
+            out_row["Cortex_Critic_Only_Response"] = cortex_critic_only.response
+            out_row["Cortex_Critic_Only_Retrieved_IDs"] = json.dumps(
+                cortex_critic_only.retrieved_ids
+            )
+            out_row["Cortex_Critic_Only_Retrieved_Context"] = cortex_critic_only.retrieved_context
+            out_row["Cortex_Critic_Only_Status"] = cortex_critic_only.status
+            out_row["Cortex_Critic_Only_Error"] = cortex_critic_only.error
+            out_row["Cortex_Critic_Only_Context_Tokens"] = context_token_count(
+                cortex_critic_only.retrieved_context
+            )
+
+            p, r = precision_recall(cortex_critic_only.retrieved_ids, gold_ids)
+            out_row["Cortex_Critic_Only_Precision"] = p
+            out_row["Cortex_Critic_Only_Recall"] = r
+            out_row["Cortex_Critic_Only_EM"] = exact_match(cortex_critic_only.response, expected)
+            out_row["Cortex_Critic_Only_F1"] = f1_score(cortex_critic_only.response, expected)
+            out_row["Cortex_Critic_Only_Faithfulness"] = score_faithfulness_with_judge(
+                retrieved_context=cortex_critic_only.retrieved_context,
+                response=cortex_critic_only.response,
+                judge_model=args.judge_model,
+            )
+
         if "cortex" in selected_models:
             cortex = run_advanced(
                 question=question,
@@ -483,6 +567,7 @@ def main() -> None:
                 max_hops=3,
                 enable_pruning=True,
                 enable_self_correction=True,
+                pruning_threshold=args.pruning_threshold,
             )
             out_row["Cortex_Response"] = cortex.response
             out_row["Cortex_Retrieved_IDs"] = json.dumps(cortex.retrieved_ids)
@@ -518,6 +603,16 @@ def main() -> None:
             out_row["Advanced_Token_Efficiency_Ratio"] = (
                 advanced_tokens / naive_tokens if naive_tokens > 0 else None
             )
+        if "cortex-pruner-only" in selected_models:
+            cortex_pruner_tokens = float(out_row.get("Cortex_Pruner_Only_Context_Tokens", 0) or 0)
+            out_row["Cortex_Pruner_Only_Token_Efficiency_Ratio"] = (
+                cortex_pruner_tokens / naive_tokens if naive_tokens > 0 else None
+            )
+        if "cortex-critic-only" in selected_models:
+            cortex_critic_tokens = float(out_row.get("Cortex_Critic_Only_Context_Tokens", 0) or 0)
+            out_row["Cortex_Critic_Only_Token_Efficiency_Ratio"] = (
+                cortex_critic_tokens / naive_tokens if naive_tokens > 0 else None
+            )
         if "cortex" in selected_models:
             cortex_tokens = float(out_row.get("Cortex_Context_Tokens", 0) or 0)
             out_row["Cortex_Token_Efficiency_Ratio"] = (
@@ -532,7 +627,15 @@ def main() -> None:
     results_df.to_csv(results_path, index=False)
 
     summary_rows: list[dict[str, Any]] = []
-    for model_name in ["Naive", "BM25", "Dense", "Advanced", "Cortex"]:
+    for model_name in [
+        "Naive",
+        "BM25",
+        "Dense",
+        "Advanced",
+        "Cortex_Pruner_Only",
+        "Cortex_Critic_Only",
+        "Cortex",
+    ]:
         model_cols = [c for c in results_df.columns if c.startswith(f"{model_name}_")]
         if not model_cols:
             continue

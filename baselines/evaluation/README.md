@@ -6,6 +6,8 @@ This folder contains the unified evaluation script for:
 - `bm25` lexical baseline (rank_bm25)
 - `dense` semantic baseline (sentence-transformers)
 - `advanced` (advanced pipeline with pruning/self-correction disabled)
+- `cortex-pruner-only` (pruning enabled, critic/self-correction disabled)
+- `cortex-critic-only` (pruning disabled, critic/self-correction enabled)
 - `cortex` (advanced pipeline enabled)
 
 Backward compatibility: `challenger` is accepted as an alias for `advanced`.
@@ -26,7 +28,7 @@ If `golden_ids` is missing, the script synthesizes article-level IDs from `Doc`,
 ## Run
 
 ```powershell
-python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,bm25,dense,advanced,cortex --max-rows 25
+python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,bm25,dense,advanced,cortex-pruner-only,cortex-critic-only,cortex --pruning-threshold 0.45 --max-rows 25
 ```
 
 PowerShell multiline version:
@@ -35,8 +37,15 @@ PowerShell multiline version:
 python -m baselines.evaluation.run_eval `
   --input "eval Qs.xlsx" `
   --api-base-url http://localhost:8000/api `
-  --models naive,bm25,dense,advanced,cortex `
+  --models naive,bm25,dense,advanced,cortex-pruner-only,cortex-critic-only,cortex `
+  --pruning-threshold 0.45 `
   --max-rows 25
+```
+
+Sensitivity sweep example:
+
+```powershell
+python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models advanced,cortex-pruner-only,cortex --pruning-threshold 0.7 --max-rows 25
 ```
 
 ## Artifacts
