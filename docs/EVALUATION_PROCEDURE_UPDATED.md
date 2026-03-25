@@ -2,10 +2,11 @@
 
 ## Scope
 
-This SOP operationalizes evaluation for three model variants in this repository:
+This SOP operationalizes evaluation for four model variants in this repository:
 
 - **Naive**: `baselines/naive_baseline.py`
-- **Challenger**: advanced pipeline with pruning and self-correction disabled
+- **BM25**: `baselines/bm25_baseline.py` lexical baseline
+- **Advanced**: advanced pipeline with pruning and self-correction disabled
 - **Cortex**: advanced pipeline with pruning and self-correction enabled
 
 Advanced query orchestration is implemented in:
@@ -41,7 +42,7 @@ Run all rows through all target models and produce per-row outputs:
 Run command:
 
 ```powershell
-python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,challenger,cortex --max-rows 25
+python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,bm25,advanced,cortex --max-rows 25
 ```
 
 Optional flags:

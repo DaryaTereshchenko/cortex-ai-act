@@ -3,8 +3,12 @@
 This folder contains the unified evaluation script for:
 
 - `naive` baseline
-- `challenger` (advanced pipeline with pruning/self-correction disabled)
+- `bm25` lexical baseline (rank_bm25)
+- `dense` semantic baseline (sentence-transformers)
+- `advanced` (advanced pipeline with pruning/self-correction disabled)
 - `cortex` (advanced pipeline enabled)
+
+Backward compatibility: `challenger` is accepted as an alias for `advanced`.
 
 ## Dataset input
 
@@ -22,7 +26,7 @@ If `golden_ids` is missing, the script synthesizes article-level IDs from `Doc`,
 ## Run
 
 ```powershell
-python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,challenger,cortex --max-rows 25
+python -m baselines.evaluation.run_eval --input "eval Qs.xlsx" --api-base-url http://localhost:8000/api --models naive,bm25,dense,advanced,cortex --max-rows 25
 ```
 
 PowerShell multiline version:
@@ -31,7 +35,7 @@ PowerShell multiline version:
 python -m baselines.evaluation.run_eval `
   --input "eval Qs.xlsx" `
   --api-base-url http://localhost:8000/api `
-  --models naive,challenger,cortex `
+  --models naive,bm25,dense,advanced,cortex `
   --max-rows 25
 ```
 
