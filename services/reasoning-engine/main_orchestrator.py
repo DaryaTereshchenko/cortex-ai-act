@@ -121,7 +121,9 @@ def run_cortex_engine(
         # 4. Update Cumulative Metrics
         saved = max(0, (hop_raw_chars - hop_kept_chars) // 4)
         state["metrics"]["tokens_saved"] += saved
-        state["metrics"]["nodes_pruned"] += max(0, initial_node_count - len(state["pruned_context"]))
+        state["metrics"]["nodes_pruned"] += max(
+            0, initial_node_count - len(state["pruned_context"])
+        )
 
         # 5. Semantic Critic Layer
         if enable_self_correction:
