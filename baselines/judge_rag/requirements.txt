@@ -1,0 +1,16 @@
+# Judge RAG pipeline dependencies
+# Core
+langchain>=0.3.0
+langgraph>=0.2.0
+ollama>=0.4.0
+
+# Retrieval
+rank-bm25>=0.2.2
+sentence-transformers>=3.0.0
+numpy>=1.26.0
+
+# Neo4j
+neo4j>=5.0.0
+
+# Already in parent project
+# pydantic, requests, etc.
