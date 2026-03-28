@@ -21,6 +21,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from baselines.advanced_rag.run_advanced_baseline import run_advanced_query
+from baselines.judge_rag.config import JudgeRAGConfig
+from baselines.judge_rag.pipeline import run_judge_rag
 from baselines.naive_baseline import run_naive_rag_benchmark
 
 STOPWORDS = {
@@ -295,6 +297,47 @@ def run_advanced(
     )
 
 
+def run_judge(
+    *,
+    question: str,
+    regulation: str,
+    judge_rag_retrieval_model: str,
+    judge_rag_generation_model: str,
+    judge_rag_judge_model: str,
+    ollama_base_url: str,
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_password: str,
+) -> ModelOutput:
+    cfg = JudgeRAGConfig(
+        regulation=regulation,
+        retrieval_model=judge_rag_retrieval_model,
+        generation_model=judge_rag_generation_model,
+        judge_model=judge_rag_judge_model,
+        ollama_base_url=ollama_base_url,
+        neo4j_uri=neo4j_uri,
+        neo4j_user=neo4j_user,
+        neo4j_password=neo4j_password,
+    )
+    try:
+        result = run_judge_rag(question, cfg)
+        return ModelOutput(
+            response=result["answer"],
+            retrieved_ids=result["retrieved_ids"],
+            retrieved_context=result["retrieved_context"],
+            status="completed",
+            error="",
+        )
+    except Exception as exc:
+        return ModelOutput(
+            response="",
+            retrieved_ids=[],
+            retrieved_context="",
+            status="failed",
+            error=str(exc),
+        )
+
+
 def ensure_artifact_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -309,12 +352,23 @@ def main() -> None:
     parser.add_argument(
         "--models",
         default="naive,challenger,cortex",
-        help="Comma list from: naive,challenger,cortex",
+        help="Comma list from: naive,challenger,cortex,judge",
     )
+    # Judge RAG pipeline options
+    parser.add_argument("--judge-rag-retrieval-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG query rewriting")
+    parser.add_argument("--judge-rag-generation-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG answer generation")
+    parser.add_argument("--judge-rag-judge-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG judge evaluation")
+    parser.add_argument("--ollama-base-url", default="http://localhost:11434")
+    parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
+    parser.add_argument("--neo4j-user", default="neo4j")
+    parser.add_argument("--neo4j-password", default="changeme")
     args = parser.parse_args()
 
     selected_models = {m.strip().lower() for m in args.models.split(",") if m.strip()}
-    valid = {"naive", "challenger", "cortex"}
+    valid = {"naive", "challenger", "cortex", "judge"}
     unknown = selected_models.difference(valid)
     if unknown:
         raise ValueError(f"Unknown model(s): {sorted(unknown)}")
@@ -416,6 +470,36 @@ def main() -> None:
                 judge_model=args.judge_model,
             )
 
+        if "judge" in selected_models:
+            judge_out = run_judge(
+                question=question,
+                regulation=regulation,
+                judge_rag_retrieval_model=args.judge_rag_retrieval_model,
+                judge_rag_generation_model=args.judge_rag_generation_model,
+                judge_rag_judge_model=args.judge_rag_judge_model,
+                ollama_base_url=args.ollama_base_url,
+                neo4j_uri=args.neo4j_uri,
+                neo4j_user=args.neo4j_user,
+                neo4j_password=args.neo4j_password,
+            )
+            out_row["Judge_Response"] = judge_out.response
+            out_row["Judge_Retrieved_IDs"] = json.dumps(judge_out.retrieved_ids)
+            out_row["Judge_Retrieved_Context"] = judge_out.retrieved_context
+            out_row["Judge_Status"] = judge_out.status
+            out_row["Judge_Error"] = judge_out.error
+            out_row["Judge_Context_Tokens"] = context_token_count(judge_out.retrieved_context)
+
+            p, r = precision_recall(judge_out.retrieved_ids, gold_ids)
+            out_row["Judge_Precision"] = p
+            out_row["Judge_Recall"] = r
+            out_row["Judge_EM"] = exact_match(judge_out.response, expected)
+            out_row["Judge_F1"] = f1_score(judge_out.response, expected)
+            out_row["Judge_Faithfulness"] = score_faithfulness_with_judge(
+                retrieved_context=judge_out.retrieved_context,
+                response=judge_out.response,
+                judge_model=args.judge_model,
+            )
+
         naive_tokens = float(out_row.get("Naive_Context_Tokens", 0) or 0)
         if "challenger" in selected_models:
             challenger_tokens = float(out_row.get("Challenger_Context_Tokens", 0) or 0)
@@ -427,6 +511,11 @@ def main() -> None:
             out_row["Cortex_Token_Efficiency_Ratio"] = (
                 cortex_tokens / naive_tokens if naive_tokens > 0 else None
             )
+        if "judge" in selected_models:
+            judge_tokens = float(out_row.get("Judge_Context_Tokens", 0) or 0)
+            out_row["Judge_Token_Efficiency_Ratio"] = (
+                judge_tokens / naive_tokens if naive_tokens > 0 else None
+            )
 
         rows_out.append(out_row)
         print(f"[{len(rows_out):03d}] Completed: {question[:70]}")
@@ -436,7 +525,7 @@ def main() -> None:
     results_df.to_csv(results_path, index=False)
 
     summary_rows: list[dict[str, Any]] = []
-    for model_name in ["Naive", "Challenger", "Cortex"]:
+    for model_name in ["Naive", "Challenger", "Cortex", "Judge"]:
         model_cols = [c for c in results_df.columns if c.startswith(f"{model_name}_")]
         if not model_cols:
             continue
@@ -466,10 +555,13 @@ def main() -> None:
         "expected_answer",
         "Naive_F1",
         "Cortex_F1",
+        "Judge_F1",
         "Naive_Precision",
         "Cortex_Precision",
+        "Judge_Precision",
         "Naive_Recall",
         "Cortex_Recall",
+        "Judge_Recall",
     ]
     available_case_cols = [c for c in case_cols if c in results_df.columns]
     if {"Naive_F1", "Cortex_F1"}.issubset(results_df.columns):
