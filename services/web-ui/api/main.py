@@ -233,6 +233,7 @@ async def _try_reasoning_engine(
         "max_hops": request.max_hops,
         "enable_pruning": request.enable_pruning,
         "enable_self_correction": request.enable_self_correction,
+        "pruning_threshold": request.pruning_threshold,
         "kg_hits": kg_search,
     }
 

@@ -20,6 +20,12 @@ class QueryRequest(BaseModel):
     max_hops: int = Field(default=3, ge=1, le=5, description="Max graph traversal depth")
     enable_pruning: bool = Field(default=True, description="Enable semantic entropy pruning")
     enable_self_correction: bool = Field(default=True, description="Enable agentic self-correction")
+    pruning_threshold: float = Field(
+        default=0.45,
+        ge=0.0,
+        le=1.0,
+        description="Semantic pruning threshold (higher = stricter pruning)",
+    )
 
 
 class LegalNode(BaseModel):

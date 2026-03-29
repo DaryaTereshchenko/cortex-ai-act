@@ -81,6 +81,7 @@ def run_advanced_query(
     max_hops: int,
     enable_pruning: bool,
     enable_self_correction: bool,
+    pruning_threshold: float,
     poll_interval_seconds: float,
     timeout_seconds: float,
 ) -> dict[str, Any]:
@@ -91,6 +92,7 @@ def run_advanced_query(
         "max_hops": max_hops,
         "enable_pruning": enable_pruning,
         "enable_self_correction": enable_self_correction,
+        "pruning_threshold": pruning_threshold,
     }
 
     started = time.time()
@@ -142,6 +144,7 @@ def main() -> None:
     parser.add_argument("--max-hops", type=int, default=3)
     parser.add_argument("--disable-pruning", action="store_true")
     parser.add_argument("--disable-self-correction", action="store_true")
+    parser.add_argument("--pruning-threshold", type=float, default=0.45)
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
@@ -153,6 +156,7 @@ def main() -> None:
         max_hops=args.max_hops,
         enable_pruning=not args.disable_pruning,
         enable_self_correction=not args.disable_self_correction,
+        pruning_threshold=args.pruning_threshold,
         poll_interval_seconds=args.poll_interval,
         timeout_seconds=args.timeout,
     )
