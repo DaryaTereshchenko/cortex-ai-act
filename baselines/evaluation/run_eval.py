@@ -74,6 +74,18 @@ def normalize_text(text: str) -> str:
     return " ".join(tokens)
 
 
+def get_expected_answer(row: pd.Series, model_name: str, use_cortex_evals: bool) -> str:
+    """
+    Get the expected answer for a model.
+    If use_cortex_evals is True and cortex_expected_answer exists, use it for Cortex models.
+    Otherwise use expected_answer.
+    """
+    is_cortex_model = model_name in ("Cortex_Pruner_Only", "Cortex_Critic_Only", "Cortex")
+    if use_cortex_evals and is_cortex_model and "cortex_expected_answer" in row.index:
+        return str(row.get("cortex_expected_answer", row["expected_answer"]))
+    return str(row["expected_answer"])
+
+
 def f1_score(prediction: str, target: str) -> float:
     pred_tokens = normalize_text(prediction).split()
     gold_tokens = normalize_text(target).split()
@@ -169,6 +181,8 @@ def load_eval_dataframe(path: Path) -> pd.DataFrame:
         "Correct Answer": "expected_answer",
         "expected_answer": "expected_answer",
         "golden_ids": "golden_ids",
+        "Cortex Expected Answer": "cortex_expected_answer",
+        "cortex_expected_answer": "cortex_expected_answer",
     }
     for src, dst in rename_map.items():
         if src in df.columns and src != dst:
@@ -184,6 +198,10 @@ def load_eval_dataframe(path: Path) -> pd.DataFrame:
     else:
         df["golden_ids"] = df["golden_ids"].apply(parse_id_list)
 
+    # If cortex_expected_answer column exists but is incomplete, fill with expected_answer
+    if "cortex_expected_answer" in df.columns:
+        df["cortex_expected_answer"] = df["cortex_expected_answer"].fillna(df["expected_answer"])
+    
     return df
 
 
@@ -364,6 +382,11 @@ def main() -> None:
             "(challenger alias -> advanced)"
         ),
     )
+    parser.add_argument(
+        "--cortex-only-evals",
+        action="store_true",
+        help="If set, use cortex_expected_answer column for Cortex models only (other models use expected_answer)",
+    )
     args = parser.parse_args()
 
     selected_models = {m.strip().lower() for m in args.models.split(",") if m.strip()}
@@ -519,8 +542,9 @@ def main() -> None:
             p, r = precision_recall(cortex_pruner_only.retrieved_ids, gold_ids)
             out_row["Cortex_Pruner_Only_Precision"] = p
             out_row["Cortex_Pruner_Only_Recall"] = r
-            out_row["Cortex_Pruner_Only_EM"] = exact_match(cortex_pruner_only.response, expected)
-            out_row["Cortex_Pruner_Only_F1"] = f1_score(cortex_pruner_only.response, expected)
+            cortex_pruner_expected = get_expected_answer(row, "Cortex_Pruner_Only", args.cortex_only_evals)
+            out_row["Cortex_Pruner_Only_EM"] = exact_match(cortex_pruner_only.response, cortex_pruner_expected)
+            out_row["Cortex_Pruner_Only_F1"] = f1_score(cortex_pruner_only.response, cortex_pruner_expected)
             out_row["Cortex_Pruner_Only_Faithfulness"] = score_faithfulness_with_judge(
                 retrieved_context=cortex_pruner_only.retrieved_context,
                 response=cortex_pruner_only.response,
@@ -551,8 +575,9 @@ def main() -> None:
             p, r = precision_recall(cortex_critic_only.retrieved_ids, gold_ids)
             out_row["Cortex_Critic_Only_Precision"] = p
             out_row["Cortex_Critic_Only_Recall"] = r
-            out_row["Cortex_Critic_Only_EM"] = exact_match(cortex_critic_only.response, expected)
-            out_row["Cortex_Critic_Only_F1"] = f1_score(cortex_critic_only.response, expected)
+            cortex_critic_expected = get_expected_answer(row, "Cortex_Critic_Only", args.cortex_only_evals)
+            out_row["Cortex_Critic_Only_EM"] = exact_match(cortex_critic_only.response, cortex_critic_expected)
+            out_row["Cortex_Critic_Only_F1"] = f1_score(cortex_critic_only.response, cortex_critic_expected)
             out_row["Cortex_Critic_Only_Faithfulness"] = score_faithfulness_with_judge(
                 retrieved_context=cortex_critic_only.retrieved_context,
                 response=cortex_critic_only.response,
@@ -579,8 +604,9 @@ def main() -> None:
             p, r = precision_recall(cortex.retrieved_ids, gold_ids)
             out_row["Cortex_Precision"] = p
             out_row["Cortex_Recall"] = r
-            out_row["Cortex_EM"] = exact_match(cortex.response, expected)
-            out_row["Cortex_F1"] = f1_score(cortex.response, expected)
+            cortex_main_expected = get_expected_answer(row, "Cortex", args.cortex_only_evals)
+            out_row["Cortex_EM"] = exact_match(cortex.response, cortex_main_expected)
+            out_row["Cortex_F1"] = f1_score(cortex.response, cortex_main_expected)
             out_row["Cortex_Faithfulness"] = score_faithfulness_with_judge(
                 retrieved_context=cortex.retrieved_context,
                 response=cortex.response,
