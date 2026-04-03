@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import string
@@ -13,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import requests
 
 # Ensure repository root is importable when executed as a script path.
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -250,66 +248,6 @@ def context_token_count(text: str) -> int:
     return len(str(text).split())
 
 
-def score_faithfulness_with_judge(
-    *,
-    retrieved_context: str,
-    response: str,
-    judge_model: str,
-) -> float | None:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        return None
-
-    prompt = (
-        "You are evaluating legal QA faithfulness. Score from 1 to 5.\n"
-        "5 = answer strictly grounded in provided context.\n"
-        "1 = severe hallucination.\n"
-        "Return JSON only: {\"score\": number, \"reason\": string}."
-    )
-
-    user = (
-        f"Retrieved context:\n{retrieved_context}\n\n"
-        f"AI answer:\n{response}\n\n"
-        "Does the answer contain only information grounded in the context?"
-    )
-
-    payload = {
-        "model": judge_model,
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": user},
-        ],
-        "temperature": 0,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    resp = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=90,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    content = (
-        data.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "{\"score\": null}")
-    )
-
-    try:
-        parsed = json.loads(content)
-        score = parsed.get("score")
-        return float(score) if score is not None else None
-    except Exception:
-        match = re.search(r"([1-5](?:\.\d+)?)", str(content))
-        return float(match.group(1)) if match else None
-
-
 def run_naive(question: str) -> ModelOutput:
     result = run_naive_rag_benchmark(question)
     context = str(result.get("retrieved_context") or "")
@@ -468,7 +406,6 @@ def main() -> None:
         help="Maximum rows to evaluate (0 = all rows, default: 0)",
     )
     parser.add_argument("--artifact-dir", default="artifacts/eval")
-    parser.add_argument("--judge-model", default="gpt-4o-mini")
     parser.add_argument(
         "--pruning-threshold",
         type=float,
@@ -491,10 +428,10 @@ def main() -> None:
         help="Use cortex_expected_answer column for Cortex models when available",
     )
     # Judge RAG pipeline options
-    parser.add_argument("--judge-rag-retrieval-model", default="phi4:latest",
-                        help="Ollama model for Judge RAG query rewriting (default: phi4:latest)")
-    parser.add_argument("--judge-rag-generation-model", default="phi4:latest",
-                        help="Ollama model for Judge RAG answer generation (default: phi4:latest)")
+    parser.add_argument("--judge-rag-retrieval-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG query rewriting (default: llama3.1:8b)")
+    parser.add_argument("--judge-rag-generation-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG answer generation (default: llama3.1:8b)")
     parser.add_argument("--judge-rag-judge-model", default="phi4:latest",
                         help="Ollama model for Judge RAG judge evaluation (default: phi4:latest)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434")
@@ -549,11 +486,6 @@ def main() -> None:
             out_row["Naive_Recall"] = r
             out_row["Naive_EM"] = exact_match(naive.response, expected)
             out_row["Naive_F1"] = f1_score(naive.response, expected)
-            out_row["Naive_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=naive.retrieved_context,
-                response=naive.response,
-                judge_model=args.judge_model,
-            )
 
         if "bm25" in selected_models:
             bm25 = run_bm25(question)
@@ -569,11 +501,6 @@ def main() -> None:
             out_row["BM25_Recall"] = r
             out_row["BM25_EM"] = exact_match(bm25.response, expected)
             out_row["BM25_F1"] = f1_score(bm25.response, expected)
-            out_row["BM25_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=bm25.retrieved_context,
-                response=bm25.response,
-                judge_model=args.judge_model,
-            )
 
         if "dense" in selected_models:
             dense = run_dense(question)
@@ -589,11 +516,6 @@ def main() -> None:
             out_row["Dense_Recall"] = r
             out_row["Dense_EM"] = exact_match(dense.response, expected)
             out_row["Dense_F1"] = f1_score(dense.response, expected)
-            out_row["Dense_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=dense.retrieved_context,
-                response=dense.response,
-                judge_model=args.judge_model,
-            )
 
         if "advanced" in selected_models:
             advanced = run_advanced(
@@ -617,11 +539,6 @@ def main() -> None:
             out_row["Advanced_Recall"] = r
             out_row["Advanced_EM"] = exact_match(advanced.response, expected)
             out_row["Advanced_F1"] = f1_score(advanced.response, expected)
-            out_row["Advanced_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=advanced.retrieved_context,
-                response=advanced.response,
-                judge_model=args.judge_model,
-            )
 
         if "cortex-pruner-only" in selected_models:
             cortex_pruner_only = run_advanced(
@@ -650,11 +567,6 @@ def main() -> None:
             cortex_pruner_expected = get_expected_answer(row, "Cortex_Pruner_Only", args.cortex_only_evals)
             out_row["Cortex_Pruner_Only_EM"] = exact_match(cortex_pruner_only.response, cortex_pruner_expected)
             out_row["Cortex_Pruner_Only_F1"] = f1_score(cortex_pruner_only.response, cortex_pruner_expected)
-            out_row["Cortex_Pruner_Only_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=cortex_pruner_only.retrieved_context,
-                response=cortex_pruner_only.response,
-                judge_model=args.judge_model,
-            )
 
         if "cortex-critic-only" in selected_models:
             cortex_critic_only = run_advanced(
@@ -683,11 +595,6 @@ def main() -> None:
             cortex_critic_expected = get_expected_answer(row, "Cortex_Critic_Only", args.cortex_only_evals)
             out_row["Cortex_Critic_Only_EM"] = exact_match(cortex_critic_only.response, cortex_critic_expected)
             out_row["Cortex_Critic_Only_F1"] = f1_score(cortex_critic_only.response, cortex_critic_expected)
-            out_row["Cortex_Critic_Only_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=cortex_critic_only.retrieved_context,
-                response=cortex_critic_only.response,
-                judge_model=args.judge_model,
-            )
 
         if "cortex" in selected_models:
             cortex = run_advanced(
@@ -712,11 +619,6 @@ def main() -> None:
             cortex_main_expected = get_expected_answer(row, "Cortex", args.cortex_only_evals)
             out_row["Cortex_EM"] = exact_match(cortex.response, cortex_main_expected)
             out_row["Cortex_F1"] = f1_score(cortex.response, cortex_main_expected)
-            out_row["Cortex_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=cortex.retrieved_context,
-                response=cortex.response,
-                judge_model=args.judge_model,
-            )
 
         if "judge" in selected_models:
             judge_out = run_judge(
@@ -747,11 +649,6 @@ def main() -> None:
             # Generation metrics
             out_row["Judge_EM"] = exact_match(judge_out.response, expected)
             out_row["Judge_F1"] = f1_score(judge_out.response, expected)
-            out_row["Judge_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=judge_out.retrieved_context,
-                response=judge_out.response,
-                judge_model=args.judge_model,
-            )
 
             # Judge-specific metrics (LLM-as-judge evaluation)
             out_row["Judge_LLM_Score"] = judge_out.judge_score
@@ -761,11 +658,6 @@ def main() -> None:
             out_row["Judge_LLM_Precision"] = judge_out.judge_precision_score
             out_row["Judge_Attempts"] = judge_out.judge_attempts
             out_row["Judge_Uncertainty"] = judge_out.uncertainty
-            out_row["Judge_Faithfulness"] = score_faithfulness_with_judge(
-                retrieved_context=judge_out.retrieved_context,
-                response=judge_out.response,
-                judge_model=args.judge_model,
-            )
 
         naive_tokens = float(out_row.get("Naive_Context_Tokens", 0) or 0)
         if "bm25" in selected_models:
@@ -832,7 +724,7 @@ def main() -> None:
                 float(results_df[col].dropna().mean()) if col in results_df.columns else None
             )
         # Generation metrics
-        for metric in ["EM", "F1", "Faithfulness"]:
+        for metric in ["EM", "F1"]:
             col = f"{model_name}_{metric}"
             row_summary[f"avg_{metric}"] = (
                 float(results_df[col].dropna().mean()) if col in results_df.columns else None

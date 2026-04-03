@@ -20,8 +20,8 @@ class JudgeRAGConfig:
     neo4j_database: str = "neo4j"
 
     # Ollama models (caller picks any model available on the local Ollama server)
-    retrieval_model: str = "phi4:latest"
-    generation_model: str = "phi4:latest"
+    retrieval_model: str = "llama3.1:8b"
+    generation_model: str = "llama3.1:8b"
     judge_model: str = "phi4:latest"
 
     # Ollama endpoint
