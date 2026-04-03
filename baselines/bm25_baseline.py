@@ -31,9 +31,9 @@ def _build_bm25(tokenized: list[list[str]]):
 @lru_cache(maxsize=1)
 def _load_article_corpus() -> tuple[list[str], list[str], list[list[str]], Any]:
     query = """
-    MATCH (c:DocumentChunk)
-    WHERE c.chunk_id IS NOT NULL AND c.text IS NOT NULL
-    RETURN c.chunk_id AS id, c.text AS text
+    MATCH (a:Article)
+    WHERE a.id IS NOT NULL AND a.full_text IS NOT NULL
+    RETURN a.id AS id, a.full_text AS text
     """
 
     ids: list[str] = []

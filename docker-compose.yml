@@ -52,16 +52,15 @@ services:
     restart: unless-stopped
     ports:
       - "${KG_PORT:-8001}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *common-env
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URI: ${NEO4J_URI:-bolt://host.docker.internal:7687}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       NEO4J_DATABASE: ${NEO4J_DATABASE:-neo4j}
       SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
-    depends_on:
-      neo4j:
-        condition: service_healthy
     volumes:
       - ./services/knowledge-graph:/app
       - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
@@ -80,17 +79,16 @@ services:
     restart: unless-stopped
     ports:
       - "${RE_PORT:-8002}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *common-env
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URI: ${NEO4J_URI:-bolt://host.docker.internal:7687}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       HF_HOME: /app/.cache/huggingface
       SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
       MODEL_ID: ${MODEL_ID:-llama3.1:8b}
-    depends_on:
-      neo4j:
-        condition: service_healthy
     volumes:
       - ./services/reasoning-engine:/app
       - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
