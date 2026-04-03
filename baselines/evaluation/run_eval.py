@@ -68,10 +68,15 @@ class ModelOutput:
 
 
 def normalize_text(text: str) -> str:
-    lowered = text.lower()
+    lowered = str(text).lower()
     no_punct = lowered.translate(str.maketrans("", "", string.punctuation))
     tokens = [tok for tok in no_punct.split() if tok and tok not in STOPWORDS]
     return " ".join(tokens)
+
+
+def sanitize_expected_text(text: Any) -> str:
+    """Strip noisy pandas Series metadata before text-based scoring."""
+    return re.sub(r"Name:.*dtype:.*", "", str(text), flags=re.DOTALL).strip()
 
 
 def get_expected_answer(row: pd.Series, model_name: str, use_cortex_evals: bool) -> str:
@@ -87,6 +92,7 @@ def get_expected_answer(row: pd.Series, model_name: str, use_cortex_evals: bool)
 
 
 def f1_score(prediction: str, target: str) -> float:
+    target = sanitize_expected_text(target)
     pred_tokens = normalize_text(prediction).split()
     gold_tokens = normalize_text(target).split()
 
@@ -113,6 +119,7 @@ def f1_score(prediction: str, target: str) -> float:
 
 
 def exact_match(prediction: str, target: str) -> float:
+    target = sanitize_expected_text(target)
     return 1.0 if normalize_text(prediction) == normalize_text(target) else 0.0
 
 
@@ -134,7 +141,7 @@ def parse_id_list(value: Any) -> list[str]:
         except Exception:
             pass
 
-    chunks = re.split(r"[;,|]", text)
+    chunks = re.split(r"[;,|\s]", text)
     return [chunk.strip() for chunk in chunks if chunk.strip()]
 
 
@@ -174,6 +181,23 @@ def load_eval_dataframe(path: Path) -> pd.DataFrame:
         df = pd.read_csv(path)
     else:
         df = pd.read_excel(path)
+
+    # Unified indexing required by eval handoff:
+    # Col E (index 4)  -> question
+    # Col K (index 10) -> golden_ids
+    # Col L (index 11) -> expected_answer
+    if len(df.columns) >= 12:
+        df = df.copy()
+        df["question"] = df.iloc[:, 4].astype(str)
+        df["golden_ids"] = df.iloc[:, 10].apply(parse_id_list)
+        df["expected_answer"] = df.iloc[:, 11].astype(str)
+
+        # Keep cortex_expected_answer aligned to col L in indexed mode unless explicitly provided.
+        if "cortex_expected_answer" in df.columns:
+            df["cortex_expected_answer"] = df["cortex_expected_answer"].fillna(df["expected_answer"])
+        else:
+            df["cortex_expected_answer"] = df["expected_answer"]
+        return df
 
     rename_map = {
         "Question": "question",
@@ -364,7 +388,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run ground-truth evaluation")
     parser.add_argument("--input", default="eval Qs.xlsx", help="Input dataset path (.xlsx or .csv)")
     parser.add_argument("--api-base-url", default="http://localhost:8000/api")
-    parser.add_argument("--max-rows", type=int, default=0, help="0 = all rows")
+    parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=100,
+        help="Maximum rows to evaluate (capped at 100)",
+    )
     parser.add_argument("--artifact-dir", default="artifacts/eval")
     parser.add_argument("--judge-model", default="gpt-4o-mini")
     parser.add_argument(
@@ -408,8 +437,9 @@ def main() -> None:
         raise ValueError(f"Unknown model(s): {sorted(unknown)}")
 
     df = load_eval_dataframe(Path(args.input))
-    if args.max_rows > 0:
-        df = df.head(args.max_rows)
+    requested_rows = args.max_rows if args.max_rows and args.max_rows > 0 else 100
+    eval_rows = min(requested_rows, 100)
+    df = df.head(eval_rows)
 
     artifact_dir = Path(args.artifact_dir)
     ensure_artifact_dir(artifact_dir)

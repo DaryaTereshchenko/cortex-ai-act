@@ -28,6 +28,19 @@ If `golden_ids` is missing, the script synthesizes article-level IDs from `Doc`,
 
 If `cortex_expected_answer` is missing but `--cortex-only-evals` is set, the script falls back to `expected_answer`.
 
+Indexed-mode behavior (used when input has at least 12 columns):
+
+- Question source: column E (index 4)
+- Golden IDs source: column K (index 10)
+- F1/EM target source: column L (index 11)
+
+In indexed mode, the script also strips pandas metadata fragments like `Name: ... dtype: ...` from expected-answer text before EM/F1 scoring.
+
+Row limit policy:
+
+- Evaluation always runs on top 100 rows maximum.
+- `--max-rows` is supported, but still capped at 100.
+
 ## Run
 
 ```powershell
