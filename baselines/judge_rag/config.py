@@ -23,6 +23,7 @@ class JudgeRAGConfig:
     retrieval_model: str = "llama3.1:8b"
     generation_model: str = "llama3.1:8b"
     judge_model: str = "phi4:latest"
+    query_rewrite_model: str = "phi4:latest"
 
     # Ollama endpoint
     ollama_base_url: str = "http://localhost:11434"
