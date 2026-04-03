@@ -21,6 +21,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from baselines.advanced_rag.run_advanced_baseline import run_advanced_query
+from baselines.bm25_baseline import run_bm25_rag_benchmark
+from baselines.dense_embedding_baseline import run_dense_embedding_rag_benchmark
 from baselines.judge_rag.config import JudgeRAGConfig
 from baselines.judge_rag.pipeline import run_judge_rag
 from baselines.naive_baseline import run_naive_rag_benchmark
@@ -380,6 +382,19 @@ def run_advanced(
     )
 
 
+@dataclass
+class JudgeModelOutput(ModelOutput):
+    """Extended output for Judge RAG with judge-specific metrics."""
+    judge_score: float = 0.0
+    judge_attempts: int = 0
+    retrieval_similarity: float = 0.0
+    uncertainty: str = "high"
+    judge_relevance: float = 0.0
+    judge_faithfulness: float = 0.0
+    judge_completeness: float = 0.0
+    judge_precision_score: float = 0.0
+
+
 def run_judge(
     *,
     question: str,
@@ -391,7 +406,7 @@ def run_judge(
     neo4j_uri: str,
     neo4j_user: str,
     neo4j_password: str,
-) -> ModelOutput:
+) -> JudgeModelOutput:
     cfg = JudgeRAGConfig(
         regulation=regulation,
         retrieval_model=judge_rag_retrieval_model,
@@ -404,15 +419,28 @@ def run_judge(
     )
     try:
         result = run_judge_rag(question, cfg)
-        return ModelOutput(
+        # Extract per-dimension judge scores from the last attempt
+        judge_details = result.get("judge_details", {})
+        last_attempt_key = f"judge_attempt_{result.get('attempts_used', 1)}"
+        last_judge = judge_details.get(last_attempt_key, {})
+
+        return JudgeModelOutput(
             response=result["answer"],
             retrieved_ids=result["retrieved_ids"],
             retrieved_context=result["retrieved_context"],
             status="completed",
             error="",
+            judge_score=result.get("judge_score", 0.0),
+            judge_attempts=result.get("attempts_used", 0),
+            retrieval_similarity=result.get("retrieval_similarity", 0.0),
+            uncertainty=result.get("uncertainty", "high"),
+            judge_relevance=last_judge.get("relevance", 0.0),
+            judge_faithfulness=last_judge.get("faithfulness", 0.0),
+            judge_completeness=last_judge.get("completeness", 0.0),
+            judge_precision_score=last_judge.get("precision", 0.0),
         )
     except Exception as exc:
-        return ModelOutput(
+        return JudgeModelOutput(
             response="",
             retrieved_ids=[],
             retrieved_context="",
@@ -427,13 +455,17 @@ def ensure_artifact_dir(path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run ground-truth evaluation")
-    parser.add_argument("--input", default="eval Qs.xlsx", help="Input dataset path (.xlsx or .csv)")
+    parser.add_argument(
+        "--input",
+        default=str(Path(__file__).resolve().parent / "data" / "EU AI and DSA Compliance Dataset.xlsx"),
+        help="Input dataset path (.xlsx or .csv)",
+    )
     parser.add_argument("--api-base-url", default="http://localhost:8000/api")
     parser.add_argument(
         "--max-rows",
         type=int,
-        default=100,
-        help="Maximum rows to evaluate (capped at 100)",
+        default=0,
+        help="Maximum rows to evaluate (0 = all rows, default: 0)",
     )
     parser.add_argument("--artifact-dir", default="artifacts/eval")
     parser.add_argument("--judge-model", default="gpt-4o-mini")
@@ -445,16 +477,26 @@ def main() -> None:
     )
     parser.add_argument(
         "--models",
-        default="naive,challenger,cortex",
-        help="Comma list from: naive,challenger,cortex,judge",
+        default="naive,bm25,dense,advanced,cortex,judge",
+        help=(
+            "Comma list of models to evaluate. "
+            "Options: naive, bm25, dense, advanced, cortex-pruner-only, "
+            "cortex-critic-only, cortex, judge"
+        ),
+    )
+    parser.add_argument(
+        "--cortex-only-evals",
+        action="store_true",
+        default=False,
+        help="Use cortex_expected_answer column for Cortex models when available",
     )
     # Judge RAG pipeline options
-    parser.add_argument("--judge-rag-retrieval-model", default="llama3.1:8b",
-                        help="Ollama model for Judge RAG query rewriting")
-    parser.add_argument("--judge-rag-generation-model", default="llama3.1:8b",
-                        help="Ollama model for Judge RAG answer generation")
-    parser.add_argument("--judge-rag-judge-model", default="llama3.1:8b",
-                        help="Ollama model for Judge RAG judge evaluation")
+    parser.add_argument("--judge-rag-retrieval-model", default="phi4:latest",
+                        help="Ollama model for Judge RAG query rewriting (default: phi4:latest)")
+    parser.add_argument("--judge-rag-generation-model", default="phi4:latest",
+                        help="Ollama model for Judge RAG answer generation (default: phi4:latest)")
+    parser.add_argument("--judge-rag-judge-model", default="phi4:latest",
+                        help="Ollama model for Judge RAG judge evaluation (default: phi4:latest)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
@@ -462,15 +504,17 @@ def main() -> None:
     args = parser.parse_args()
 
     selected_models = {m.strip().lower() for m in args.models.split(",") if m.strip()}
-    valid = {"naive", "challenger", "cortex", "judge"}
+    valid = {
+        "naive", "bm25", "dense", "advanced",
+        "cortex-pruner-only", "cortex-critic-only", "cortex", "judge",
+    }
     unknown = selected_models.difference(valid)
     if unknown:
-        raise ValueError(f"Unknown model(s): {sorted(unknown)}")
+        raise ValueError(f"Unknown model(s): {sorted(unknown)}. Valid: {sorted(valid)}")
 
     df = load_eval_dataframe(Path(args.input))
-    requested_rows = args.max_rows if args.max_rows and args.max_rows > 0 else 100
-    eval_rows = min(requested_rows, 100)
-    df = df.head(eval_rows)
+    if args.max_rows and args.max_rows > 0:
+        df = df.head(args.max_rows)
 
     artifact_dir = Path(args.artifact_dir)
     ensure_artifact_dir(artifact_dir)
@@ -686,6 +730,7 @@ def main() -> None:
                 neo4j_user=args.neo4j_user,
                 neo4j_password=args.neo4j_password,
             )
+            # Standard RAG metrics
             out_row["Judge_Response"] = judge_out.response
             out_row["Judge_Retrieved_IDs"] = json.dumps(judge_out.retrieved_ids)
             out_row["Judge_Retrieved_Context"] = judge_out.retrieved_context
@@ -693,11 +738,29 @@ def main() -> None:
             out_row["Judge_Error"] = judge_out.error
             out_row["Judge_Context_Tokens"] = context_token_count(judge_out.retrieved_context)
 
+            # Retrieval metrics
             p, r = precision_recall(judge_out.retrieved_ids, gold_ids)
             out_row["Judge_Precision"] = p
             out_row["Judge_Recall"] = r
+            out_row["Judge_Retrieval_Similarity"] = judge_out.retrieval_similarity
+
+            # Generation metrics
             out_row["Judge_EM"] = exact_match(judge_out.response, expected)
             out_row["Judge_F1"] = f1_score(judge_out.response, expected)
+            out_row["Judge_Faithfulness"] = score_faithfulness_with_judge(
+                retrieved_context=judge_out.retrieved_context,
+                response=judge_out.response,
+                judge_model=args.judge_model,
+            )
+
+            # Judge-specific metrics (LLM-as-judge evaluation)
+            out_row["Judge_LLM_Score"] = judge_out.judge_score
+            out_row["Judge_LLM_Relevance"] = judge_out.judge_relevance
+            out_row["Judge_LLM_Faithfulness"] = judge_out.judge_faithfulness
+            out_row["Judge_LLM_Completeness"] = judge_out.judge_completeness
+            out_row["Judge_LLM_Precision"] = judge_out.judge_precision_score
+            out_row["Judge_Attempts"] = judge_out.judge_attempts
+            out_row["Judge_Uncertainty"] = judge_out.uncertainty
             out_row["Judge_Faithfulness"] = score_faithfulness_with_judge(
                 retrieved_context=judge_out.retrieved_context,
                 response=judge_out.response,
@@ -749,7 +812,11 @@ def main() -> None:
     results_df.to_csv(results_path, index=False)
 
     summary_rows: list[dict[str, Any]] = []
-    for model_name in ["Naive", "Challenger", "Cortex", "Judge"]:
+    all_model_prefixes = [
+        "Naive", "BM25", "Dense", "Advanced",
+        "Cortex_Pruner_Only", "Cortex_Critic_Only", "Cortex", "Judge",
+    ]
+    for model_name in all_model_prefixes:
         model_cols = [c for c in results_df.columns if c.startswith(f"{model_name}_")]
         if not model_cols:
             continue
@@ -758,19 +825,40 @@ def main() -> None:
             "model": model_name,
             "model_display": MODEL_DISPLAY_NAMES.get(model_name, model_name),
         }
-        for metric in [
-            "Precision",
-            "Recall",
-            "Faithfulness",
-            "EM",
-            "F1",
-            "Token_Efficiency_Ratio",
-            "Context_Tokens",
-        ]:
+        # Retrieval metrics
+        for metric in ["Precision", "Recall"]:
             col = f"{model_name}_{metric}"
             row_summary[f"avg_{metric}"] = (
                 float(results_df[col].dropna().mean()) if col in results_df.columns else None
             )
+        # Generation metrics
+        for metric in ["EM", "F1", "Faithfulness"]:
+            col = f"{model_name}_{metric}"
+            row_summary[f"avg_{metric}"] = (
+                float(results_df[col].dropna().mean()) if col in results_df.columns else None
+            )
+        # Efficiency metrics
+        for metric in ["Token_Efficiency_Ratio", "Context_Tokens"]:
+            col = f"{model_name}_{metric}"
+            row_summary[f"avg_{metric}"] = (
+                float(results_df[col].dropna().mean()) if col in results_df.columns else None
+            )
+        # Judge-specific metrics (only for Judge model)
+        if model_name == "Judge":
+            for metric in [
+                "LLM_Score", "LLM_Relevance", "LLM_Faithfulness",
+                "LLM_Completeness", "LLM_Precision", "Attempts",
+                "Retrieval_Similarity",
+            ]:
+                col = f"Judge_{metric}"
+                row_summary[f"avg_{metric}"] = (
+                    float(results_df[col].dropna().mean()) if col in results_df.columns else None
+                )
+            # Uncertainty distribution
+            unc_col = "Judge_Uncertainty"
+            if unc_col in results_df.columns:
+                unc_counts = results_df[unc_col].value_counts().to_dict()
+                row_summary["uncertainty_distribution"] = json.dumps(unc_counts)
         summary_rows.append(row_summary)
 
     summary_df = pd.DataFrame(summary_rows)
@@ -780,16 +868,13 @@ def main() -> None:
     case_cols = [
         "question",
         "expected_answer",
-        "Naive_F1",
-        "Cortex_F1",
-        "Judge_F1",
-        "Naive_Precision",
-        "Cortex_Precision",
-        "Judge_Precision",
-        "Naive_Recall",
-        "Cortex_Recall",
-        "Judge_Recall",
     ]
+    # Dynamically add F1, Precision, Recall columns for all evaluated models
+    for prefix in all_model_prefixes:
+        for metric in ["F1", "Precision", "Recall"]:
+            col = f"{prefix}_{metric}"
+            if col in results_df.columns:
+                case_cols.append(col)
     available_case_cols = [c for c in case_cols if c in results_df.columns]
     if {"Naive_F1", "Cortex_F1"}.issubset(results_df.columns):
         cases = results_df.copy()
