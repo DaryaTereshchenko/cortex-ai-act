@@ -67,7 +67,14 @@ class KGConnector:
         return []
 
 
-def run_cortex_engine(user_query: str):
+def run_cortex_engine(
+    user_query: str,
+    *,
+    max_hops: int = 3,
+    enable_pruning: bool = True,
+    enable_self_correction: bool = True,
+    pruning_threshold: float = 0.45,
+):
     start_time = time.time()
 
     # Performance Trackers
@@ -93,25 +100,37 @@ def run_cortex_engine(user_query: str):
     }
 
     # --- AGENTIC LOOP ---
-    while state["hops"] < 3:
+    while state["hops"] < max_hops:
         # 1. Capture Encountered volume
         hop_raw_chars = sum(len(n.get("content", "")) for n in state["retrieved_nodes"])
         global_raw_chars += hop_raw_chars
         initial_node_count = len(state["retrieved_nodes"])
 
         # 2. Semantic Pruning Layer
-        state = pruning_node(state)
+        if enable_pruning:
+            state = pruning_node(state, threshold=pruning_threshold)
+        else:
+            # Ablation mode: bypass semantic pruning and keep all retrieved context.
+            state["pruned_context"] = list(state["retrieved_nodes"])
+            state["reasoning_trace"].append("Pruner disabled: retaining full retrieved context.")
 
         # 3. Capture Accepted volume
         hop_kept_chars = sum(len(n.get("content", "")) for n in state["pruned_context"])
         global_kept_chars += hop_kept_chars
 
         # 4. Update Cumulative Metrics
-        state["metrics"]["tokens_saved"] += max(0, (hop_raw_chars - hop_kept_chars) // 4)
-        state["metrics"]["nodes_pruned"] += initial_node_count - len(state["pruned_context"])
+        saved = max(0, (hop_raw_chars - hop_kept_chars) // 4)
+        state["metrics"]["tokens_saved"] += saved
+        state["metrics"]["nodes_pruned"] += max(
+            0, initial_node_count - len(state["pruned_context"])
+        )
 
         # 5. Semantic Critic Layer
-        state = critic_node(state)
+        if enable_self_correction:
+            state = critic_node(state)
+        else:
+            state["is_accurate"] = True
+            state["reasoning_trace"].append("Critic disabled: skipping self-correction checks.")
 
         if self_correction_router(state) == "generate_final_answer":
             break
@@ -126,7 +145,11 @@ def run_cortex_engine(user_query: str):
 
         new_nodes = KGConnector.get_neighbors(target_node)
         state["retrieved_nodes"].extend(new_nodes)
-        state["hops"] += 1
+        if enable_self_correction:
+            state["hops"] += 1
+        else:
+            # With critic disabled we do not loop for corrective traversal.
+            break
 
     # --- FINAL METRICS CALCULATION ---
     # Calculating the reduction ratio
@@ -170,6 +193,9 @@ def run_cortex_engine(user_query: str):
             "nodes_pruned": int(state["metrics"]["nodes_pruned"]),
             "latency_seconds": float(state["metrics"]["latency_seconds"]),
             "entropy_reduction": float(final_reduction),
+            "enable_pruning": bool(enable_pruning),
+            "enable_self_correction": bool(enable_self_correction),
+            "pruning_threshold": float(pruning_threshold),
         },
     }
 

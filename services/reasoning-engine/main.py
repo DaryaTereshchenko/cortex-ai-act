@@ -23,5 +23,5 @@ async def root() -> dict:
     return {
         "service": "reasoning-engine",
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "model_id": os.getenv("MODEL_ID", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+        "model_id": os.getenv("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct"),
     }

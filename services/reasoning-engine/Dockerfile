@@ -1,6 +1,6 @@
 ###############################################################################
 # Reasoning-Engine Service
-# — Llama 3.1 8B, LangGraph, Entropy Pruning, Self-Correction Loop
+# — Qwen 2.5 0.5B Instruct, LangGraph, Entropy Pruning, Self-Correction Loop
 ###############################################################################
 FROM python:3.11-slim AS base
 
