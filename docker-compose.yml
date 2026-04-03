@@ -58,12 +58,14 @@ services:
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       NEO4J_DATABASE: ${NEO4J_DATABASE:-neo4j}
+      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
     depends_on:
       neo4j:
         condition: service_healthy
     volumes:
       - ./services/knowledge-graph:/app
-      - kg_cache:/app/.cache
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - ${SENTENCE_TRANSFORMERS_HOME:-~/.cache/torch/sentence_transformers}:/app/.cache/sentence_transformers
     networks:
       - cortex-net
 
@@ -84,13 +86,15 @@ services:
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       HF_HOME: /app/.cache/huggingface
+      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
       MODEL_ID: ${MODEL_ID:-llama3.1:8b}
     depends_on:
       neo4j:
         condition: service_healthy
     volumes:
       - ./services/reasoning-engine:/app
-      - model_cache:/app/.cache
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - ${SENTENCE_TRANSFORMERS_HOME:-~/.cache/torch/sentence_transformers}:/app/.cache/sentence_transformers
     networks:
       - cortex-net
     # Uncomment for GPU support (requires NVIDIA Container Toolkit)
@@ -198,15 +202,41 @@ services:
     networks:
       - cortex-net
 
+  # ===========================================================================
+  # 7. OLLAMA  —  Local LLM inference server
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cortex-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cortex-net
+    # Uncomment for GPU support (requires NVIDIA Container Toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 # =============================================================================
 # Volumes & Networks
 # =============================================================================
 volumes:
   neo4j_data:
   neo4j_logs:
-  kg_cache:
-  model_cache:
   bench_results:
+  ollama_models:
 
 networks:
   cortex-net:

@@ -262,7 +262,7 @@ cp .env.example .env
 |---|---|---|
 | `NEO4J_USER` | `neo4j` | knowledge-graph, reasoning-engine |
 | `NEO4J_PASSWORD` | `changeme` | knowledge-graph, reasoning-engine |
-| `MODEL_ID` | `Qwen/Qwen2.5-0.5B-Instruct` | reasoning-engine |
+| `MODEL_ID` | `llama3.1:8b` | reasoning-engine |
 | `WANDB_API_KEY` | (empty) | benchmarking |
 | `MLFLOW_TRACKING_URI` | (empty) | benchmarking |
 

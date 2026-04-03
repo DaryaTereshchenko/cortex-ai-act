@@ -31,9 +31,9 @@ def _build_bm25(tokenized: list[list[str]]):
 @lru_cache(maxsize=1)
 def _load_article_corpus() -> tuple[list[str], list[str], list[list[str]], Any]:
     query = """
-    MATCH (a:Article)
-    WHERE a.id IS NOT NULL AND a.full_text IS NOT NULL
-    RETURN a.id AS id, a.full_text AS text
+    MATCH (c:DocumentChunk)
+    WHERE c.chunk_id IS NOT NULL AND c.text IS NOT NULL
+    RETURN c.chunk_id AS id, c.text AS text
     """
 
     ids: list[str] = []
@@ -48,6 +48,9 @@ def _load_article_corpus() -> tuple[list[str], list[str], list[list[str]], Any]:
                 continue
             ids.append(node_id)
             texts.append(text)
+
+    if not texts:
+        return ids, texts, [], None
 
     tokenized = [_tokenize(t) for t in texts]
     bm25 = _build_bm25(tokenized)

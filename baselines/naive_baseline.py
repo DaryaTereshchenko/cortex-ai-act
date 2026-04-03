@@ -11,9 +11,9 @@ def run_naive_rag_benchmark(query_text: str):
 
     # We use $searchTerm to avoid the Python naming conflict
     cypher_query = """
-    CALL db.index.fulltext.queryNodes("article_fulltext", $searchTerm)
+    CALL db.index.fulltext.queryNodes("chunk_text_fulltext", $searchTerm)
     YIELD node, score
-    RETURN node.full_text AS text
+    RETURN node.text AS text
     LIMIT 5
     """
 

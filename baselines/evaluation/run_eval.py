@@ -8,6 +8,7 @@ import re
 import sys
 import string
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -757,6 +758,28 @@ def main() -> None:
     summary_path = artifact_dir / "summary_metrics.csv"
     summary_df.to_csv(summary_path, index=False)
 
+    # ── Write eval metadata (models, params, timestamp) ────────────────────
+    metadata = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "input_file": str(Path(args.input).name),
+        "total_questions": len(results_df),
+        "models_evaluated": sorted(selected_models),
+        "embedding_model": "all-MiniLM-L6-v2",
+        "judge_rag": {
+            "retrieval_model": args.judge_rag_retrieval_model,
+            "generation_model": args.judge_rag_generation_model,
+            "judge_model": args.judge_rag_judge_model,
+            "ollama_base_url": args.ollama_base_url,
+        },
+        "cortex": {
+            "api_base_url": args.api_base_url,
+            "pruning_threshold": args.pruning_threshold,
+        },
+        "neo4j_uri": args.neo4j_uri,
+    }
+    metadata_path = artifact_dir / "eval_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2))
+
     case_cols = [
         "question",
         "expected_answer",
@@ -775,9 +798,10 @@ def main() -> None:
         cases_path = artifact_dir / "top5_case_studies.csv"
         cases[available_case_cols + ["delta_f1"]].to_csv(cases_path, index=False)
 
-    print("\\nEvaluation complete.")
+    print("\nEvaluation complete.")
     print(f"Per-question results: {results_path}")
     print(f"Summary metrics:      {summary_path}")
+    print(f"Eval metadata:        {metadata_path}")
 
 
 if __name__ == "__main__":
