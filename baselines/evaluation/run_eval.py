@@ -22,6 +22,14 @@ if str(REPO_ROOT) not in sys.path:
 from baselines.advanced_rag.run_advanced_baseline import run_advanced_query
 from baselines.bm25_baseline import run_bm25_rag_benchmark
 from baselines.dense_embedding_baseline import run_dense_embedding_rag_benchmark
+from baselines.evaluation.metrics import (
+    golden_id_metrics,
+    generator_semantic_metrics,
+    generator_statistical_metrics,
+    mcq_retrieval_metrics,
+    retrieval_text_metrics,
+    source_identification_metrics,
+)
 from baselines.judge_rag.config import JudgeRAGConfig
 from baselines.judge_rag.pipeline import run_judge_rag
 from baselines.naive_baseline import run_naive_rag_benchmark
@@ -249,14 +257,87 @@ def context_token_count(text: str) -> int:
     return len(str(text).split())
 
 
+def compute_comprehensive_metrics(
+    prefix: str,
+    model_out: "ModelOutput",
+    row: pd.Series,
+    gold_ids: list[str],
+    expected_answer: str,
+    has_generator: bool,
+    encoder: Any = None,
+) -> dict[str, Any]:
+    """Compute all metric groups for a single model on a single question.
+
+    Returns a flat dict with keys prefixed by *prefix* (e.g. 'Naive_').
+    """
+    out: dict[str, Any] = {}
+
+    # -- raw outputs --
+    out[f"{prefix}_Response"] = model_out.response
+    out[f"{prefix}_Retrieved_IDs"] = json.dumps(model_out.retrieved_ids)
+    out[f"{prefix}_Retrieved_Context"] = model_out.retrieved_context
+    out[f"{prefix}_Status"] = model_out.status
+    out[f"{prefix}_Error"] = model_out.error
+    out[f"{prefix}_Context_Tokens"] = context_token_count(model_out.retrieved_context)
+
+    # --- 1. Retrieval Source Identification ---
+    gold_doc = str(row.get("Doc", ""))
+    gold_chapter = str(row.get("Chapter", ""))
+    gold_article = row.get("Article", "")
+    gold_paragraph = row.get("Paragraph", "")
+
+    src_metrics = source_identification_metrics(
+        model_out.retrieved_ids, gold_doc, gold_chapter, gold_article, gold_paragraph,
+    )
+    for k, v in src_metrics.items():
+        out[f"{prefix}_{k}"] = v
+
+    # --- 2. Retrieval Text Quality (Correct Answer vs context) ---
+    correct_answer = str(row.get("Correct Answer", row.get("correct_answer", "")))
+    if correct_answer and correct_answer.lower() not in ("nan", "none", ""):
+        txt_metrics = retrieval_text_metrics(model_out.retrieved_context, correct_answer)
+        for k, v in txt_metrics.items():
+            out[f"{prefix}_{k}"] = v
+
+    # --- 3. MCQ Retrieval ---
+    alternatives = []
+    for alt_col in ["Alt_1", "Alt_2", "Alt_3", "Alt_4"]:
+        alt_val = str(row.get(alt_col, ""))
+        if alt_val and alt_val.lower() not in ("nan", "none", ""):
+            alternatives.append(alt_val)
+
+    if correct_answer and correct_answer.lower() not in ("nan", "none", "") and alternatives:
+        mcq_metrics = mcq_retrieval_metrics(model_out.retrieved_context, correct_answer, alternatives)
+        for k, v in mcq_metrics.items():
+            out[f"{prefix}_{k}"] = v
+
+    # --- 4. Golden ID Retrieval ---
+    gid_metrics = golden_id_metrics(model_out.retrieved_ids, gold_ids)
+    for k, v in gid_metrics.items():
+        out[f"{prefix}_{k}"] = v
+
+    # --- 5. Generator Quality ---
+    if has_generator and model_out.response.strip():
+        gen_stat = generator_statistical_metrics(model_out.response, expected_answer)
+        for k, v in gen_stat.items():
+            out[f"{prefix}_{k}"] = v
+
+        gen_sem = generator_semantic_metrics(model_out.response, expected_answer, encoder=encoder)
+        for k, v in gen_sem.items():
+            out[f"{prefix}_{k}"] = v
+
+    return out
+
+
 def run_naive(question: str) -> ModelOutput:
     result = run_naive_rag_benchmark(question)
     context = str(result.get("retrieved_context") or "")
     node_count = int(result.get("nodes_found", 0))
+    retrieved_ids = [str(v).strip() for v in result.get("retrieved_ids", []) if str(v).strip()]
 
     return ModelOutput(
         response="",  # Naive baseline currently retrieval-only
-        retrieved_ids=[],
+        retrieved_ids=retrieved_ids,
         retrieved_context=context,
         status="completed" if node_count >= 0 else "failed",
         error="",
@@ -294,7 +375,6 @@ def run_dense(question: str) -> ModelOutput:
 def run_advanced(
     *,
     question: str,
-    api_base_url: str,
     regulation: str,
     max_hops: int,
     enable_pruning: bool,
@@ -303,14 +383,11 @@ def run_advanced(
 ) -> ModelOutput:
     result = run_advanced_query(
         question,
-        api_base_url=api_base_url,
         regulation=regulation,
         max_hops=max_hops,
         enable_pruning=enable_pruning,
         enable_self_correction=enable_self_correction,
         pruning_threshold=pruning_threshold,
-        poll_interval_seconds=1.0,
-        timeout_seconds=240.0,
     )
     return ModelOutput(
         response=result["response"],
@@ -399,7 +476,8 @@ def main() -> None:
         default=str(Path(__file__).resolve().parent / "data" / "EU AI and DSA Compliance Dataset.xlsx"),
         help="Input dataset path (.xlsx or .csv)",
     )
-    parser.add_argument("--api-base-url", default="http://localhost:8000/api")
+    parser.add_argument("--reasoning-engine-url", default="http://localhost:8002",
+                        help="(unused, kept for CLI compat)")
     parser.add_argument(
         "--max-rows",
         type=int,
@@ -457,6 +535,19 @@ def main() -> None:
     artifact_dir = Path(args.artifact_dir)
     ensure_artifact_dir(artifact_dir)
 
+    # Load semantic encoder once for all generator semantic metrics
+    _semantic_encoder = None
+    has_generation_model = any(
+        m in selected_models
+        for m in ("advanced", "cortex-pruner-only", "cortex-critic-only", "cortex", "judge")
+    )
+    if has_generation_model:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _semantic_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        except ImportError:
+            print("WARNING: sentence-transformers not available; semantic metrics will be NaN")
+
     rows_out: list[dict[str, Any]] = []
 
     for idx, row in df.iterrows():
@@ -471,155 +562,91 @@ def main() -> None:
             "expected_answer": expected,
             "golden_ids": json.dumps(gold_ids),
             "regulation": regulation,
+            "doc": str(row.get("Doc", "")),
+            "chapter": str(row.get("Chapter", "")),
+            "article": str(row.get("Article", "")),
+            "paragraph": str(row.get("Paragraph", "")),
         }
 
         if "naive" in selected_models:
             naive = run_naive(question)
-            out_row["Naive_Response"] = naive.response
-            out_row["Naive_Retrieved_IDs"] = json.dumps(naive.retrieved_ids)
-            out_row["Naive_Retrieved_Context"] = naive.retrieved_context
-            out_row["Naive_Status"] = naive.status
-            out_row["Naive_Error"] = naive.error
-            out_row["Naive_Context_Tokens"] = context_token_count(naive.retrieved_context)
-
-            p, r = precision_recall(naive.retrieved_ids, gold_ids)
-            out_row["Naive_Precision"] = p
-            out_row["Naive_Recall"] = r
-            out_row["Naive_EM"] = exact_match(naive.response, expected)
-            out_row["Naive_F1"] = f1_score(naive.response, expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Naive", naive, row, gold_ids, expected,
+                has_generator=False, encoder=_semantic_encoder,
+            ))
 
         if "bm25" in selected_models:
             bm25 = run_bm25(question)
-            out_row["BM25_Response"] = bm25.response
-            out_row["BM25_Retrieved_IDs"] = json.dumps(bm25.retrieved_ids)
-            out_row["BM25_Retrieved_Context"] = bm25.retrieved_context
-            out_row["BM25_Status"] = bm25.status
-            out_row["BM25_Error"] = bm25.error
-            out_row["BM25_Context_Tokens"] = context_token_count(bm25.retrieved_context)
-
-            p, r = precision_recall(bm25.retrieved_ids, gold_ids)
-            out_row["BM25_Precision"] = p
-            out_row["BM25_Recall"] = r
-            out_row["BM25_EM"] = exact_match(bm25.response, expected)
-            out_row["BM25_F1"] = f1_score(bm25.response, expected)
+            out_row.update(compute_comprehensive_metrics(
+                "BM25", bm25, row, gold_ids, expected,
+                has_generator=False, encoder=_semantic_encoder,
+            ))
 
         if "dense" in selected_models:
             dense = run_dense(question)
-            out_row["Dense_Response"] = dense.response
-            out_row["Dense_Retrieved_IDs"] = json.dumps(dense.retrieved_ids)
-            out_row["Dense_Retrieved_Context"] = dense.retrieved_context
-            out_row["Dense_Status"] = dense.status
-            out_row["Dense_Error"] = dense.error
-            out_row["Dense_Context_Tokens"] = context_token_count(dense.retrieved_context)
-
-            p, r = precision_recall(dense.retrieved_ids, gold_ids)
-            out_row["Dense_Precision"] = p
-            out_row["Dense_Recall"] = r
-            out_row["Dense_EM"] = exact_match(dense.response, expected)
-            out_row["Dense_F1"] = f1_score(dense.response, expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Dense", dense, row, gold_ids, expected,
+                has_generator=False, encoder=_semantic_encoder,
+            ))
 
         if "advanced" in selected_models:
             advanced = run_advanced(
                 question=question,
-                api_base_url=args.api_base_url.rstrip("/"),
                 regulation=regulation,
                 max_hops=3,
                 enable_pruning=False,
                 enable_self_correction=False,
                 pruning_threshold=args.pruning_threshold,
             )
-            out_row["Advanced_Response"] = advanced.response
-            out_row["Advanced_Retrieved_IDs"] = json.dumps(advanced.retrieved_ids)
-            out_row["Advanced_Retrieved_Context"] = advanced.retrieved_context
-            out_row["Advanced_Status"] = advanced.status
-            out_row["Advanced_Error"] = advanced.error
-            out_row["Advanced_Context_Tokens"] = context_token_count(advanced.retrieved_context)
-
-            p, r = precision_recall(advanced.retrieved_ids, gold_ids)
-            out_row["Advanced_Precision"] = p
-            out_row["Advanced_Recall"] = r
-            out_row["Advanced_EM"] = exact_match(advanced.response, expected)
-            out_row["Advanced_F1"] = f1_score(advanced.response, expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Advanced", advanced, row, gold_ids, expected,
+                has_generator=True, encoder=_semantic_encoder,
+            ))
 
         if "cortex-pruner-only" in selected_models:
             cortex_pruner_only = run_advanced(
                 question=question,
-                api_base_url=args.api_base_url.rstrip("/"),
                 regulation=regulation,
                 max_hops=3,
                 enable_pruning=True,
                 enable_self_correction=False,
                 pruning_threshold=args.pruning_threshold,
             )
-            out_row["Cortex_Pruner_Only_Response"] = cortex_pruner_only.response
-            out_row["Cortex_Pruner_Only_Retrieved_IDs"] = json.dumps(
-                cortex_pruner_only.retrieved_ids
-            )
-            out_row["Cortex_Pruner_Only_Retrieved_Context"] = cortex_pruner_only.retrieved_context
-            out_row["Cortex_Pruner_Only_Status"] = cortex_pruner_only.status
-            out_row["Cortex_Pruner_Only_Error"] = cortex_pruner_only.error
-            out_row["Cortex_Pruner_Only_Context_Tokens"] = context_token_count(
-                cortex_pruner_only.retrieved_context
-            )
-
-            p, r = precision_recall(cortex_pruner_only.retrieved_ids, gold_ids)
-            out_row["Cortex_Pruner_Only_Precision"] = p
-            out_row["Cortex_Pruner_Only_Recall"] = r
             cortex_pruner_expected = get_expected_answer(row, "Cortex_Pruner_Only", args.cortex_only_evals)
-            out_row["Cortex_Pruner_Only_EM"] = exact_match(cortex_pruner_only.response, cortex_pruner_expected)
-            out_row["Cortex_Pruner_Only_F1"] = f1_score(cortex_pruner_only.response, cortex_pruner_expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Cortex_Pruner_Only", cortex_pruner_only, row, gold_ids, cortex_pruner_expected,
+                has_generator=True, encoder=_semantic_encoder,
+            ))
 
         if "cortex-critic-only" in selected_models:
             cortex_critic_only = run_advanced(
                 question=question,
-                api_base_url=args.api_base_url.rstrip("/"),
                 regulation=regulation,
                 max_hops=3,
                 enable_pruning=False,
                 enable_self_correction=True,
                 pruning_threshold=args.pruning_threshold,
             )
-            out_row["Cortex_Critic_Only_Response"] = cortex_critic_only.response
-            out_row["Cortex_Critic_Only_Retrieved_IDs"] = json.dumps(
-                cortex_critic_only.retrieved_ids
-            )
-            out_row["Cortex_Critic_Only_Retrieved_Context"] = cortex_critic_only.retrieved_context
-            out_row["Cortex_Critic_Only_Status"] = cortex_critic_only.status
-            out_row["Cortex_Critic_Only_Error"] = cortex_critic_only.error
-            out_row["Cortex_Critic_Only_Context_Tokens"] = context_token_count(
-                cortex_critic_only.retrieved_context
-            )
-
-            p, r = precision_recall(cortex_critic_only.retrieved_ids, gold_ids)
-            out_row["Cortex_Critic_Only_Precision"] = p
-            out_row["Cortex_Critic_Only_Recall"] = r
             cortex_critic_expected = get_expected_answer(row, "Cortex_Critic_Only", args.cortex_only_evals)
-            out_row["Cortex_Critic_Only_EM"] = exact_match(cortex_critic_only.response, cortex_critic_expected)
-            out_row["Cortex_Critic_Only_F1"] = f1_score(cortex_critic_only.response, cortex_critic_expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Cortex_Critic_Only", cortex_critic_only, row, gold_ids, cortex_critic_expected,
+                has_generator=True, encoder=_semantic_encoder,
+            ))
 
         if "cortex" in selected_models:
             cortex = run_advanced(
                 question=question,
-                api_base_url=args.api_base_url.rstrip("/"),
                 regulation=regulation,
                 max_hops=3,
                 enable_pruning=True,
                 enable_self_correction=True,
                 pruning_threshold=args.pruning_threshold,
             )
-            out_row["Cortex_Response"] = cortex.response
-            out_row["Cortex_Retrieved_IDs"] = json.dumps(cortex.retrieved_ids)
-            out_row["Cortex_Retrieved_Context"] = cortex.retrieved_context
-            out_row["Cortex_Status"] = cortex.status
-            out_row["Cortex_Error"] = cortex.error
-            out_row["Cortex_Context_Tokens"] = context_token_count(cortex.retrieved_context)
-
-            p, r = precision_recall(cortex.retrieved_ids, gold_ids)
-            out_row["Cortex_Precision"] = p
-            out_row["Cortex_Recall"] = r
             cortex_main_expected = get_expected_answer(row, "Cortex", args.cortex_only_evals)
-            out_row["Cortex_EM"] = exact_match(cortex.response, cortex_main_expected)
-            out_row["Cortex_F1"] = f1_score(cortex.response, cortex_main_expected)
+            out_row.update(compute_comprehensive_metrics(
+                "Cortex", cortex, row, gold_ids, cortex_main_expected,
+                has_generator=True, encoder=_semantic_encoder,
+            ))
 
         if "judge" in selected_models:
             judge_out = run_judge(
@@ -633,25 +660,21 @@ def main() -> None:
                 neo4j_user=args.neo4j_user,
                 neo4j_password=args.neo4j_password,
             )
-            # Standard RAG metrics
-            out_row["Judge_Response"] = judge_out.response
-            out_row["Judge_Retrieved_IDs"] = json.dumps(judge_out.retrieved_ids)
-            out_row["Judge_Retrieved_Context"] = judge_out.retrieved_context
-            out_row["Judge_Status"] = judge_out.status
-            out_row["Judge_Error"] = judge_out.error
-            out_row["Judge_Context_Tokens"] = context_token_count(judge_out.retrieved_context)
+            # Wrap in ModelOutput for comprehensive metrics
+            judge_model_out = ModelOutput(
+                response=judge_out.response,
+                retrieved_ids=judge_out.retrieved_ids,
+                retrieved_context=judge_out.retrieved_context,
+                status=judge_out.status,
+                error=judge_out.error,
+            )
+            out_row.update(compute_comprehensive_metrics(
+                "Judge", judge_model_out, row, gold_ids, expected,
+                has_generator=True, encoder=_semantic_encoder,
+            ))
 
-            # Retrieval metrics
-            p, r = precision_recall(judge_out.retrieved_ids, gold_ids)
-            out_row["Judge_Precision"] = p
-            out_row["Judge_Recall"] = r
+            # Judge-specific LLM-as-judge metrics (unique to this pipeline)
             out_row["Judge_Retrieval_Similarity"] = judge_out.retrieval_similarity
-
-            # Generation metrics
-            out_row["Judge_EM"] = exact_match(judge_out.response, expected)
-            out_row["Judge_F1"] = f1_score(judge_out.response, expected)
-
-            # Judge-specific metrics (LLM-as-judge evaluation)
             out_row["Judge_LLM_Score"] = judge_out.judge_score
             out_row["Judge_LLM_Relevance"] = judge_out.judge_relevance
             out_row["Judge_LLM_Faithfulness"] = judge_out.judge_faithfulness
@@ -660,42 +683,19 @@ def main() -> None:
             out_row["Judge_Attempts"] = judge_out.judge_attempts
             out_row["Judge_Uncertainty"] = judge_out.uncertainty
 
+        # Token efficiency ratios (relative to Naive baseline)
         naive_tokens = float(out_row.get("Naive_Context_Tokens", 0) or 0)
-        if "bm25" in selected_models:
-            bm25_tokens = float(out_row.get("BM25_Context_Tokens", 0) or 0)
-            out_row["BM25_Token_Efficiency_Ratio"] = (
-                bm25_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "dense" in selected_models:
-            dense_tokens = float(out_row.get("Dense_Context_Tokens", 0) or 0)
-            out_row["Dense_Token_Efficiency_Ratio"] = (
-                dense_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "advanced" in selected_models:
-            advanced_tokens = float(out_row.get("Advanced_Context_Tokens", 0) or 0)
-            out_row["Advanced_Token_Efficiency_Ratio"] = (
-                advanced_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "cortex-pruner-only" in selected_models:
-            cortex_pruner_tokens = float(out_row.get("Cortex_Pruner_Only_Context_Tokens", 0) or 0)
-            out_row["Cortex_Pruner_Only_Token_Efficiency_Ratio"] = (
-                cortex_pruner_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "cortex-critic-only" in selected_models:
-            cortex_critic_tokens = float(out_row.get("Cortex_Critic_Only_Context_Tokens", 0) or 0)
-            out_row["Cortex_Critic_Only_Token_Efficiency_Ratio"] = (
-                cortex_critic_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "cortex" in selected_models:
-            cortex_tokens = float(out_row.get("Cortex_Context_Tokens", 0) or 0)
-            out_row["Cortex_Token_Efficiency_Ratio"] = (
-                cortex_tokens / naive_tokens if naive_tokens > 0 else None
-            )
-        if "judge" in selected_models:
-            judge_tokens = float(out_row.get("Judge_Context_Tokens", 0) or 0)
-            out_row["Judge_Token_Efficiency_Ratio"] = (
-                judge_tokens / naive_tokens if naive_tokens > 0 else None
-            )
+        for model_key, sel_key in [
+            ("BM25", "bm25"), ("Dense", "dense"), ("Advanced", "advanced"),
+            ("Cortex_Pruner_Only", "cortex-pruner-only"),
+            ("Cortex_Critic_Only", "cortex-critic-only"),
+            ("Cortex", "cortex"), ("Judge", "judge"),
+        ]:
+            if sel_key in selected_models:
+                tok = float(out_row.get(f"{model_key}_Context_Tokens", 0) or 0)
+                out_row[f"{model_key}_Token_Efficiency_Ratio"] = (
+                    tok / naive_tokens if naive_tokens > 0 else None
+                )
 
         rows_out.append(out_row)
         print(f"[{len(rows_out):03d}] Completed: {question[:70]}")
@@ -704,39 +704,121 @@ def main() -> None:
     results_path = artifact_dir / "results_per_question.csv"
     results_df.to_csv(results_path, index=False)
 
-    summary_rows: list[dict[str, Any]] = []
+    # ── Build separate metric CSVs per group ───────────────────────────────
     all_model_prefixes = [
         "Naive", "BM25", "Dense", "Advanced",
         "Cortex_Pruner_Only", "Cortex_Critic_Only", "Cortex", "Judge",
     ]
-    for model_name in all_model_prefixes:
-        model_cols = [c for c in results_df.columns if c.startswith(f"{model_name}_")]
-        if not model_cols:
-            continue
+    active_prefixes = [
+        p for p in all_model_prefixes
+        if any(c.startswith(f"{p}_") for c in results_df.columns)
+    ]
 
+    # Helper: extract per-model average for given metric suffixes
+    def _model_avgs(metric_suffixes: list[str]) -> list[dict[str, Any]]:
+        rows = []
+        for model in active_prefixes:
+            r: dict[str, Any] = {
+                "model": model,
+                "model_display": MODEL_DISPLAY_NAMES.get(model, model),
+            }
+            for sfx in metric_suffixes:
+                col = f"{model}_{sfx}"
+                if col in results_df.columns:
+                    vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                    r[f"avg_{sfx}"] = float(vals.mean()) if len(vals) else None
+                    r[f"std_{sfx}"] = float(vals.std()) if len(vals) > 1 else None
+                else:
+                    r[f"avg_{sfx}"] = None
+                    r[f"std_{sfx}"] = None
+            rows.append(r)
+        return rows
+
+    # 1. Retrieval Source Identification
+    source_metrics = _model_avgs([
+        "doc_accuracy", "article_accuracy", "paragraph_accuracy",
+        "doc_hit", "article_hit", "paragraph_hit",
+    ])
+    pd.DataFrame(source_metrics).to_csv(artifact_dir / "retrieval_source_metrics.csv", index=False)
+
+    # 2. Retrieval Text Quality (Correct Answer overlap)
+    text_metrics = _model_avgs([
+        "retrieval_token_precision", "retrieval_token_recall", "retrieval_token_f1",
+        "retrieval_rouge1_f1", "retrieval_rouge1_recall",
+        "retrieval_rouge2_f1", "retrieval_rouge2_recall",
+        "retrieval_rouge_l_f1", "retrieval_rouge_l_recall",
+        "retrieval_exact_containment", "retrieval_substring_containment",
+    ])
+    pd.DataFrame(text_metrics).to_csv(artifact_dir / "retrieval_text_metrics.csv", index=False)
+
+    # 3. Retrieval MCQ
+    mcq_metrics = _model_avgs([
+        "mcq_accuracy", "mcq_correct_rank", "mcq_mrr",
+        "mcq_margin", "mcq_normalized_margin", "mcq_discrimination_score",
+    ])
+    pd.DataFrame(mcq_metrics).to_csv(artifact_dir / "retrieval_mcq_metrics.csv", index=False)
+
+    # 4. Golden ID Retrieval
+    id_metrics = _model_avgs([
+        "id_precision", "id_recall", "id_f1", "id_jaccard",
+        "id_hit_at_1", "id_hit_at_3", "id_hit_at_5",
+        "id_mrr", "id_map",
+        "id_ndcg_at_3", "id_ndcg_at_5", "id_ndcg_at_10",
+    ])
+    pd.DataFrame(id_metrics).to_csv(artifact_dir / "retrieval_id_metrics.csv", index=False)
+
+    # 5. Generator Quality
+    gen_metrics = _model_avgs([
+        "gen_exact_match", "gen_token_precision", "gen_token_recall", "gen_token_f1",
+        "gen_rouge1_precision", "gen_rouge1_recall", "gen_rouge1_f1",
+        "gen_rouge2_precision", "gen_rouge2_recall", "gen_rouge2_f1",
+        "gen_rouge_l_precision", "gen_rouge_l_recall", "gen_rouge_l_f1",
+        "gen_bleu", "gen_meteor", "gen_length_ratio",
+        "gen_semantic_similarity", "gen_bertscore_precision", "gen_bertscore_recall", "gen_bertscore_f1",
+    ])
+    pd.DataFrame(gen_metrics).to_csv(artifact_dir / "generator_metrics.csv", index=False)
+
+    # 6. Efficiency + Context metrics
+    eff_metrics = _model_avgs(["Context_Tokens", "Token_Efficiency_Ratio"])
+    pd.DataFrame(eff_metrics).to_csv(artifact_dir / "efficiency_metrics.csv", index=False)
+
+    # ── Combined summary (backward-compatible + new metrics) ───────────────
+    summary_rows: list[dict[str, Any]] = []
+    for model_name in active_prefixes:
         row_summary: dict[str, Any] = {
             "model": model_name,
             "model_display": MODEL_DISPLAY_NAMES.get(model_name, model_name),
         }
-        # Retrieval metrics
-        for metric in ["Precision", "Recall"]:
+        # Key retrieval metrics
+        for metric in [
+            "id_precision", "id_recall", "id_f1", "id_hit_at_5", "id_mrr", "id_map",
+            "doc_accuracy", "article_accuracy",
+            "retrieval_token_recall", "retrieval_rouge_l_f1",
+            "mcq_accuracy", "mcq_mrr",
+        ]:
             col = f"{model_name}_{metric}"
-            row_summary[f"avg_{metric}"] = (
-                float(results_df[col].dropna().mean()) if col in results_df.columns else None
-            )
-        # Generation metrics
-        for metric in ["EM", "F1"]:
+            if col in results_df.columns:
+                vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
+
+        # Key generation metrics
+        for metric in [
+            "gen_exact_match", "gen_token_f1", "gen_rouge_l_f1", "gen_bleu", "gen_meteor",
+            "gen_semantic_similarity", "gen_bertscore_f1",
+        ]:
             col = f"{model_name}_{metric}"
-            row_summary[f"avg_{metric}"] = (
-                float(results_df[col].dropna().mean()) if col in results_df.columns else None
-            )
-        # Efficiency metrics
-        for metric in ["Token_Efficiency_Ratio", "Context_Tokens"]:
+            if col in results_df.columns:
+                vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
+
+        # Efficiency
+        for metric in ["Context_Tokens", "Token_Efficiency_Ratio"]:
             col = f"{model_name}_{metric}"
-            row_summary[f"avg_{metric}"] = (
-                float(results_df[col].dropna().mean()) if col in results_df.columns else None
-            )
-        # Judge-specific metrics (only for Judge model)
+            if col in results_df.columns:
+                vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
+
+        # Judge-specific metrics
         if model_name == "Judge":
             for metric in [
                 "LLM_Score", "LLM_Relevance", "LLM_Faithfulness",
@@ -744,14 +826,14 @@ def main() -> None:
                 "Retrieval_Similarity",
             ]:
                 col = f"Judge_{metric}"
-                row_summary[f"avg_{metric}"] = (
-                    float(results_df[col].dropna().mean()) if col in results_df.columns else None
-                )
-            # Uncertainty distribution
+                if col in results_df.columns:
+                    vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                    row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
             unc_col = "Judge_Uncertainty"
             if unc_col in results_df.columns:
                 unc_counts = results_df[unc_col].value_counts().to_dict()
                 row_summary["uncertainty_distribution"] = json.dumps(unc_counts)
+
         summary_rows.append(row_summary)
 
     summary_df = pd.DataFrame(summary_rows)
@@ -772,36 +854,47 @@ def main() -> None:
             "ollama_base_url": args.ollama_base_url,
         },
         "cortex": {
-            "api_base_url": args.api_base_url,
             "pruning_threshold": args.pruning_threshold,
         },
         "neo4j_uri": args.neo4j_uri,
+        "metric_groups": [
+            "retrieval_source_metrics.csv",
+            "retrieval_text_metrics.csv",
+            "retrieval_mcq_metrics.csv",
+            "retrieval_id_metrics.csv",
+            "generator_metrics.csv",
+            "efficiency_metrics.csv",
+            "summary_metrics.csv",
+        ],
     }
     metadata_path = artifact_dir / "eval_metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2))
 
-    case_cols = [
-        "question",
-        "expected_answer",
-    ]
-    # Dynamically add F1, Precision, Recall columns for all evaluated models
+    # ── Top-5 case studies (backward-compat) ───────────────────────────────
+    case_cols = ["question", "expected_answer"]
     for prefix in all_model_prefixes:
-        for metric in ["F1", "Precision", "Recall"]:
+        for metric in ["gen_token_f1", "id_precision", "id_recall"]:
             col = f"{prefix}_{metric}"
             if col in results_df.columns:
                 case_cols.append(col)
     available_case_cols = [c for c in case_cols if c in results_df.columns]
-    if {"Naive_F1", "Cortex_F1"}.issubset(results_df.columns):
+    if {"Naive_gen_token_f1", "Cortex_gen_token_f1"}.issubset(results_df.columns):
         cases = results_df.copy()
-        cases["delta_f1"] = cases["Cortex_F1"] - cases["Naive_F1"]
+        cases["delta_f1"] = cases["Cortex_gen_token_f1"] - cases["Naive_gen_token_f1"]
         cases = cases.sort_values(by="delta_f1", ascending=False).head(5)
         cases_path = artifact_dir / "top5_case_studies.csv"
         cases[available_case_cols + ["delta_f1"]].to_csv(cases_path, index=False)
 
     print("\nEvaluation complete.")
-    print(f"Per-question results: {results_path}")
-    print(f"Summary metrics:      {summary_path}")
-    print(f"Eval metadata:        {metadata_path}")
+    print(f"Per-question results:          {results_path}")
+    print(f"Summary metrics:               {summary_path}")
+    print(f"Retrieval source metrics:      {artifact_dir / 'retrieval_source_metrics.csv'}")
+    print(f"Retrieval text metrics:        {artifact_dir / 'retrieval_text_metrics.csv'}")
+    print(f"Retrieval MCQ metrics:         {artifact_dir / 'retrieval_mcq_metrics.csv'}")
+    print(f"Retrieval ID metrics:          {artifact_dir / 'retrieval_id_metrics.csv'}")
+    print(f"Generator metrics:             {artifact_dir / 'generator_metrics.csv'}")
+    print(f"Efficiency metrics:            {artifact_dir / 'efficiency_metrics.csv'}")
+    print(f"Eval metadata:                 {metadata_path}")
 
 
 if __name__ == "__main__":

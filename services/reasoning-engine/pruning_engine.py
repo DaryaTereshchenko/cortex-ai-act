@@ -2,8 +2,15 @@ from sentence_transformers import SentenceTransformer, util
 
 from engine_schema import GraphState
 
-# Standardized model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Standardized model — lazy-loaded to avoid import-time network calls
+_model = None
+
+
+def _get_model() -> SentenceTransformer:
+    global _model
+    if _model is None:
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER ---
 
@@ -20,6 +27,7 @@ def pruning_node(state: GraphState, threshold=0.45) -> GraphState:
     if not raw_nodes:
         return state
 
+    model = _get_model()
     query_embedding = model.encode(state["query"], convert_to_tensor=True)
     pruned_context = []
 

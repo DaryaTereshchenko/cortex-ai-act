@@ -160,6 +160,9 @@ class GraphBuilder:
         # 6. Cross-references
         self._batch_link_references(data.get("all_links", []), reg_id)
         self._batch_metadata_references(data.get("chapters", []), reg_id)
+
+        # 7. Recital → Article references (parsed from recital text)
+        self._batch_recital_article_references(data.get("recitals", []), reg_id)
         log.info("  %d references", self._counters["references"])
 
         log.info("Ingestion complete for %s: %s", doc_type, self._counters)
@@ -1208,3 +1211,38 @@ class GraphBuilder:
 
         log.info("Cross-regulation links: %s", counters)
         return counters
+
+    # -- Recital ↔ Article references (text-mined) ----------------------------
+
+    def _batch_recital_article_references(
+        self, recitals: list[dict], reg_id: str
+    ) -> None:
+        """Parse Article mentions in recital text and create REFERENCES edges."""
+        if not recitals:
+            return
+        ref_rows: list[dict] = []
+        for rec in recitals:
+            num = rec["number"]
+            rec_id = f"{reg_id}_rec_{num}"
+            text = rec.get("text", "")
+            art_nums = set(re.findall(r"Article\s+(\d+)", text))
+            for art_num in art_nums:
+                ref_rows.append(
+                    {
+                        "src": rec_id,
+                        "tgt": f"{reg_id}_art_{art_num}",
+                        "context": f"Recital {num} references Article {art_num}",
+                    }
+                )
+        if ref_rows:
+            self.conn.execute_write(
+                """
+                UNWIND $rows AS row
+                MATCH (src:Recital {id: row.src}), (tgt:Article {id: row.tgt})
+                MERGE (src)-[:REFERENCES {context: row.context}]->(tgt)
+                MERGE (tgt)-[:REFERENCES {context: row.context}]->(src)
+                """,
+                {"rows": ref_rows},
+            )
+            self._counters["references"] += len(ref_rows)
+            log.info("  %d recital-article references", len(ref_rows))

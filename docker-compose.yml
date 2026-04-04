@@ -87,12 +87,13 @@ services:
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       HF_HOME: /app/.cache/huggingface
-      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      SENTENCE_TRANSFORMERS_HOME: ""
       MODEL_ID: ${MODEL_ID:-llama3.1:8b}
     volumes:
       - ./services/reasoning-engine:/app
       - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
-      - ${SENTENCE_TRANSFORMERS_HOME:-~/.cache/torch/sentence_transformers}:/app/.cache/sentence_transformers
     networks:
       - cortex-net
     # Uncomment for GPU support (requires NVIDIA Container Toolkit)
@@ -135,8 +136,8 @@ services:
     container_name: cortex-web-ui
     restart: unless-stopped
     ports:
-      - "${UI_PORT:-8501}:8501"    # Streamlit
-      - "${API_PORT:-8000}:8000"   # FastAPI
+      - "${UI_PORT:-8505}:8501"    # Streamlit
+      - "${API_PORT:-8085}:8000"   # FastAPI
     environment:
       <<: *common-env
       REASONING_ENGINE_URL: http://reasoning-engine:8000
