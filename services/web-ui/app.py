@@ -345,20 +345,21 @@ def render_browse_panel() -> None:
 
 # Header
 top_left, _top_right = st.columns([1, 18])
-with top_left, st.popover("ⓘ", help="About CORTEX-RAG"):
-    st.markdown("### About CORTEX-RAG")
-    st.markdown(
-        """
-        <div class="about-card">
-        <strong>CORTEX-RAG</strong> is a high-precision regulatory discovery system for the EU AI Act and DSA.
-        <br/><br/>
-        <strong>Core capabilities</strong>: graph-guided retrieval, semantic entropy pruning, and agentic self-correction.
-        <br/><br/>
-        <strong>Stack</strong>: Streamlit, FastAPI, Neo4j, and containerized deployment.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+with top_left:
+    with st.popover("ⓘ", help="About CORTEX-RAG"):
+        st.markdown("### About CORTEX-RAG")
+        st.markdown(
+            """
+            <div class="about-card">
+            <strong>CORTEX-RAG</strong> is a high-precision regulatory discovery system for the EU AI Act and DSA.
+            <br/><br/>
+            <strong>Core capabilities</strong>: graph-guided retrieval, semantic entropy pruning, and agentic self-correction.
+            <br/><br/>
+            <strong>Stack</strong>: Streamlit, FastAPI, Neo4j, and containerized deployment.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 st.markdown('<div class="workspace-title">⚖️ CORTEX-RAG</div>', unsafe_allow_html=True)
 st.markdown(
