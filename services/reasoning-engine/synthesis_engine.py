@@ -1,6 +1,6 @@
 import os
-import torch
 
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from engine_schema import GraphState
@@ -25,6 +25,7 @@ model = AutoModelForCausalLM.from_pretrained(
     low_cpu_mem_usage=True,
 )
 
+
 def synthesis_node(state: GraphState) -> GraphState:
     print("--- SYNTHESIZING ANSWER (QWEN 0.5B) ---")
 
@@ -33,7 +34,9 @@ def synthesis_node(state: GraphState) -> GraphState:
         return state
 
     # Combine pruned context into a clean string for the model
-    context_str = "\n\n".join([f"SOURCE {n['id']}: {n['content']}" for n in state["pruned_context"]])
+    context_str = "\n\n".join(
+        [f"SOURCE {n['id']}: {n['content']}" for n in state["pruned_context"]]
+    )
 
     # NEW PROMPT: Optimized for 'Regulator Style' to match high-quality Column L targets
     # Prioritizes 'Article' citations and 'shall' terminology to maximize F1 overlap.

@@ -168,7 +168,7 @@ def run_cortex_engine(
     formatted_steps = []
     for i, step in enumerate(state["reasoning_trace"]):
         # Map the internal trace message to a Web-UI recognized Agent role
-        agent_name = "Retriever" # Default
+        agent_name = "Retriever"  # Default
         if any(keyword in step for keyword in ["Critic", "Validation", "missing context"]):
             agent_name = "Critic"
         elif any(keyword in step for keyword in ["SYNTHESIZING", "QWEN", "GENERATING"]):
@@ -185,7 +185,6 @@ def run_cortex_engine(
             }
         )
 
-    
     # Return structure mapped for Gateway (Handshake Sync with WebUI Schema)
     return {
         "query_id": f"query_{int(time.time())}",

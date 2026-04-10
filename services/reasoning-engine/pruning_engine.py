@@ -7,6 +7,7 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER (F1 & DIVERSITY OPTIMIZED) ---
 
+
 def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
     """
     Innovation 1: Semantic Entropy Pruning.
@@ -48,7 +49,9 @@ def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
                 sim = float(util.cos_sim(node_emb, existing_emb))
                 if sim > 0.95:
                     is_redundant = True
-                    print(f"    ⏩ Skipping {node['id']} (Redundant with {existing['id']}: {sim:.4f})")
+                    print(
+                        f"    ⏩ Skipping {node['id']} (Redundant with {existing['id']}: {sim:.4f})"
+                    )
                     break
 
             if not is_redundant:
@@ -64,7 +67,7 @@ def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
             if node not in pruned_context:
                 pruned_context.append(node)
     elif not pruned_context and scored_nodes:
-        pruned_context = scored_nodes[:1] # Absolute fallback
+        pruned_context = scored_nodes[:1]  # Absolute fallback
 
     # --- NEW: GRAPH-AWARE STRUCTURAL LINKING ---
     # Ensure Article-Recital balance for the EMNLP 'Legal-Aware' argument.

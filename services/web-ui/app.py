@@ -166,12 +166,8 @@ def get_system_health() -> dict:
         status["api"] = response.status_code == 200
         if response.status_code == 200:
             payload = response.json()
-            status["reasoning_engine_available"] = bool(
-                payload.get("reasoning_engine_available")
-            )
-            status["knowledge_graph_available"] = bool(
-                payload.get("knowledge_graph_available")
-            )
+            status["reasoning_engine_available"] = bool(payload.get("reasoning_engine_available"))
+            status["knowledge_graph_available"] = bool(payload.get("knowledge_graph_available"))
         else:
             status["error"] = f"API unavailable ({response.status_code})"
     except Exception as exc:
@@ -211,9 +207,7 @@ def submit_query(question: str, payload: dict) -> dict | None:
 
         progress = min((attempt / max_attempts) * 100, 92)
         progress_bar.progress(int(progress) / 100)
-        status_text.info(
-            f"Processing... step {len(result.get('reasoning_steps', []))}"
-        )
+        status_text.info(f"Processing... step {len(result.get('reasoning_steps', []))}")
         time.sleep(1)
 
     st.warning("Query timeout")
@@ -342,6 +336,7 @@ def render_browse_panel() -> None:
 
     except Exception as exc:
         st.error(f"Error: {exc!s}")
+
 
 # Header
 top_left, _top_right = st.columns([1, 18])
