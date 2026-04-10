@@ -1,5 +1,5 @@
 from sentence_transformers import SentenceTransformer, util
-import torch
+
 from engine_schema import GraphState
 
 # Standardized model - keeping it lightweight for 1-core CPU
@@ -22,7 +22,7 @@ def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
 
     # 1. Encode the Query
     query_embedding = model.encode(state["query"], convert_to_tensor=True)
-    
+
     # Track all scores to handle the safety net
     scored_nodes = []
     for node in raw_nodes:
@@ -42,7 +42,7 @@ def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
             # REDUNDANCY FILTER: If a node is 95% similar to one we already have, skip it.
             is_redundant = False
             node_emb = model.encode(node["content"], convert_to_tensor=True)
-            
+
             for existing in pruned_context:
                 existing_emb = model.encode(existing["content"], convert_to_tensor=True)
                 sim = float(util.cos_sim(node_emb, existing_emb))
@@ -50,7 +50,7 @@ def pruning_node(state: GraphState, threshold=0.38) -> GraphState:
                     is_redundant = True
                     print(f"    ⏩ Skipping {node['id']} (Redundant with {existing['id']}: {sim:.4f})")
                     break
-            
+
             if not is_redundant:
                 pruned_context.append(node)
 
