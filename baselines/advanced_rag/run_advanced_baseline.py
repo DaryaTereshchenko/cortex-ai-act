@@ -76,6 +76,9 @@ def run_advanced_query(
     enable_pruning: bool = False,
     enable_self_correction: bool = False,
     pruning_threshold: float = 0.45,
+    synthesis_model: str = "",
+    ollama_base_url: str = "http://localhost:11434",
+    embedding_model: str = "",
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Call run_cortex_engine directly (no HTTP, no Docker gateway needed)."""
@@ -88,6 +91,9 @@ def run_advanced_query(
             enable_pruning=enable_pruning,
             enable_self_correction=enable_self_correction,
             pruning_threshold=pruning_threshold,
+            synthesis_model=synthesis_model,
+            ollama_base_url=ollama_base_url,
+            embedding_model=embedding_model,
         )
     except Exception as exc:
         return {

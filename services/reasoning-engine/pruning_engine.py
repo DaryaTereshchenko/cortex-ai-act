@@ -2,20 +2,21 @@ from sentence_transformers import SentenceTransformer, util
 
 from engine_schema import GraphState
 
-# Standardized model — lazy-loaded to avoid import-time network calls
-_model = None
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+
+# Lazy-loaded model cache keyed by model name
+_models: dict[str, SentenceTransformer] = {}
 
 
-def _get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model
+def _get_model(model_name: str = DEFAULT_EMBEDDING_MODEL) -> SentenceTransformer:
+    if model_name not in _models:
+        _models[model_name] = SentenceTransformer(model_name)
+    return _models[model_name]
 
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER ---
 
 
-def pruning_node(state: GraphState, threshold=0.45) -> GraphState:
+def pruning_node(state: GraphState, threshold=0.45, embedding_model: str = DEFAULT_EMBEDDING_MODEL) -> GraphState:
     """
     Innovation 1: Semantic Entropy Pruning.
     Filters retrieved nodes based on their semantic relevance to the query.
@@ -27,7 +28,7 @@ def pruning_node(state: GraphState, threshold=0.45) -> GraphState:
     if not raw_nodes:
         return state
 
-    model = _get_model()
+    model = _get_model(embedding_model)
     query_embedding = model.encode(state["query"], convert_to_tensor=True)
     pruned_context = []
 

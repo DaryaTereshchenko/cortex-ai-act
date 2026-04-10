@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 # Ensure repository root is importable when executed as a script path.
@@ -21,7 +22,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from baselines.advanced_rag.run_advanced_baseline import run_advanced_query
 from baselines.bm25_baseline import run_bm25_rag_benchmark
-from baselines.dense_embedding_baseline import run_dense_embedding_rag_benchmark
+from baselines.dense_embedding_baseline import (
+    run_dense_embedding_rag_benchmark,
+)
 from baselines.evaluation.metrics import (
     golden_id_metrics,
     generator_semantic_metrics,
@@ -39,11 +42,15 @@ MODEL_DISPLAY_NAMES = {
     "Naive": "Naive (Neo4j full-text lexical baseline)",
     "BM25": "BM25 (rank_bm25 lexical baseline)",
     "Dense": "Dense Embedding (all-MiniLM-L6-v2 semantic retrieval baseline)",
+    "Dense_Legal": "Dense Legal (InLegalBERT domain-adapted semantic baseline)",
     "Advanced": "Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",
     "Cortex_Pruner_Only": "Cortex Pruner Only (pruning=on, critic=off)",
     "Cortex_Critic_Only": "Cortex Critic Only (pruning=off, critic=on)",
     "Cortex": "Cortex Main (CORTEX pipeline; pruning=on, critic=on)",
+    "Judge": "Judge",
 }
+
+RETRIEVAL_ONLY = {"Naive", "BM25", "Dense", "Dense_Legal"}
 
 STOPWORDS = {
     "a",
@@ -125,11 +132,6 @@ def f1_score(prediction: str, target: str) -> float:
     if precision + recall == 0:
         return 0.0
     return 2 * precision * recall / (precision + recall)
-
-
-def exact_match(prediction: str, target: str) -> float:
-    target = sanitize_expected_text(target)
-    return 1.0 if normalize_text(prediction) == normalize_text(target) else 0.0
 
 
 def parse_id_list(value: Any) -> list[str]:
@@ -358,8 +360,8 @@ def run_bm25(question: str) -> ModelOutput:
     )
 
 
-def run_dense(question: str) -> ModelOutput:
-    result = run_dense_embedding_rag_benchmark(question, top_k=5)
+def run_dense(question: str, model_name: str = "all-MiniLM-L6-v2") -> ModelOutput:
+    result = run_dense_embedding_rag_benchmark(question, top_k=5, model_name=model_name)
     context = str(result.get("retrieved_context") or "")
     retrieved_ids = [str(v).strip() for v in result.get("retrieved_ids", []) if str(v).strip()]
 
@@ -380,6 +382,9 @@ def run_advanced(
     enable_pruning: bool,
     enable_self_correction: bool,
     pruning_threshold: float,
+    synthesis_model: str = "",
+    ollama_base_url: str = "http://localhost:11434",
+    embedding_model: str = "",
 ) -> ModelOutput:
     result = run_advanced_query(
         question,
@@ -388,6 +393,9 @@ def run_advanced(
         enable_pruning=enable_pruning,
         enable_self_correction=enable_self_correction,
         pruning_threshold=pruning_threshold,
+        synthesis_model=synthesis_model,
+        ollama_base_url=ollama_base_url,
+        embedding_model=embedding_model,
     )
     return ModelOutput(
         response=result["response"],
@@ -422,6 +430,7 @@ def run_judge(
     neo4j_uri: str,
     neo4j_user: str,
     neo4j_password: str,
+    embedding_model: str = "all-MiniLM-L6-v2",
 ) -> JudgeModelOutput:
     cfg = JudgeRAGConfig(
         regulation=regulation,
@@ -432,6 +441,7 @@ def run_judge(
         neo4j_uri=neo4j_uri,
         neo4j_user=neo4j_user,
         neo4j_password=neo4j_password,
+        embedding_model=embedding_model,
     )
     try:
         result = run_judge_rag(question, cfg)
@@ -469,6 +479,120 @@ def ensure_artifact_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _bootstrap_ci(
+    a: pd.Series,
+    b: pd.Series,
+    n_boot: int = 10_000,
+    ci: float = 0.95,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Paired bootstrap test: is mean(a) - mean(b) significantly != 0?
+
+    Returns dict with mean_diff, ci_lower, ci_upper, p_value.
+    """
+    rng = np.random.RandomState(seed)
+    a_vals = a.to_numpy()
+    b_vals = b.to_numpy()
+    observed_diff = float(np.nanmean(a_vals) - np.nanmean(b_vals))
+
+    diffs = a_vals - b_vals
+    valid = ~np.isnan(diffs)
+    diffs = diffs[valid]
+    n = len(diffs)
+    if n == 0:
+        return {
+            "mean_diff": observed_diff,
+            "ci_lower": float("nan"),
+            "ci_upper": float("nan"),
+            "p_value": float("nan"),
+        }
+
+    boot_means = np.empty(n_boot)
+    for i in range(n_boot):
+        sample_idx = rng.randint(0, n, size=n)
+        boot_means[i] = diffs[sample_idx].mean()
+
+    alpha = 1.0 - ci
+    ci_lower = float(np.percentile(boot_means, 100 * alpha / 2))
+    ci_upper = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
+    # Two-sided p-value: proportion of bootstrap samples on the other side of 0
+    p_value = float(np.mean(boot_means <= 0) if observed_diff > 0 else np.mean(boot_means >= 0))
+    p_value = min(2 * p_value, 1.0)  # two-sided correction
+
+    return {
+        "mean_diff": observed_diff,
+        "ci_lower": ci_lower,
+        "ci_upper": ci_upper,
+        "p_value": p_value,
+    }
+
+
+def _run_significance_tests(
+    results_df: pd.DataFrame,
+    active_prefixes: list[str],
+    artifact_dir: Path,
+) -> None:
+    """Run paired bootstrap significance tests for key metric comparisons."""
+    comparisons = [
+        ("BM25", "Dense"),
+        ("Dense_Legal", "Dense"),
+        ("BM25", "Naive"),
+        ("Cortex", "Naive"),
+        ("Cortex", "Judge"),
+        ("Cortex_Critic_Only", "Advanced"),
+        ("Judge", "Dense"),
+    ]
+    metrics = [
+        "id_f1", "id_recall", "mcq_accuracy",
+        "retrieval_token_recall", "doc_accuracy",
+    ]
+    # Add generator metrics only for generative model pairs
+    gen_metrics = ["gen_token_f1", "gen_semantic_similarity", "gen_bertscore_f1"]
+
+    sig_rows: list[dict[str, Any]] = []
+    for model_a, model_b in comparisons:
+        if model_a not in active_prefixes or model_b not in active_prefixes:
+            continue
+        for metric in metrics:
+            col_a = f"{model_a}_{metric}"
+            col_b = f"{model_b}_{metric}"
+            if col_a not in results_df.columns or col_b not in results_df.columns:
+                continue
+            a = pd.to_numeric(results_df[col_a], errors="coerce")
+            b = pd.to_numeric(results_df[col_b], errors="coerce")
+            result = _bootstrap_ci(a, b)
+            sig_rows.append({
+                "model_a": model_a,
+                "model_b": model_b,
+                "metric": metric,
+                **result,
+                "significant_at_005": result["p_value"] < 0.05 if not np.isnan(result["p_value"]) else None,
+            })
+        # Generator metrics — only if both models are generative
+        if model_a not in RETRIEVAL_ONLY and model_b not in RETRIEVAL_ONLY:
+            for metric in gen_metrics:
+                col_a = f"{model_a}_{metric}"
+                col_b = f"{model_b}_{metric}"
+                if col_a not in results_df.columns or col_b not in results_df.columns:
+                    continue
+                a = pd.to_numeric(results_df[col_a], errors="coerce")
+                b = pd.to_numeric(results_df[col_b], errors="coerce")
+                result = _bootstrap_ci(a, b)
+                sig_rows.append({
+                    "model_a": model_a,
+                    "model_b": model_b,
+                    "metric": metric,
+                    **result,
+                    "significant_at_005": result["p_value"] < 0.05 if not np.isnan(result["p_value"]) else None,
+                })
+
+    if sig_rows:
+        sig_df = pd.DataFrame(sig_rows)
+        sig_path = artifact_dir / "significance_tests.csv"
+        sig_df.to_csv(sig_path, index=False)
+        print(f"Significance tests:            {sig_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run ground-truth evaluation")
     parser.add_argument(
@@ -496,7 +620,7 @@ def main() -> None:
         default="naive,bm25,dense,advanced,cortex,judge",
         help=(
             "Comma list of models to evaluate. "
-            "Options: naive, bm25, dense, advanced, cortex-pruner-only, "
+            "Options: naive, bm25, dense, dense-legal, advanced, cortex-pruner-only, "
             "cortex-critic-only, cortex, judge"
         ),
     )
@@ -513,6 +637,16 @@ def main() -> None:
                         help="Ollama model for Judge RAG answer generation (default: llama3.1:8b)")
     parser.add_argument("--judge-rag-judge-model", default="phi4:latest",
                         help="Ollama model for Judge RAG judge evaluation (default: phi4:latest)")
+    parser.add_argument("--cortex-synthesis-model", default="",
+                        help="Ollama model for CORTEX synthesis (empty = template-based, no LLM)")
+    parser.add_argument("--dense-embedding-model", default="all-MiniLM-L6-v2",
+                        help="Sentence-transformers model for Dense baseline (default: all-MiniLM-L6-v2)")
+    parser.add_argument("--dense-legal-embedding-model", default="law-ai/InLegalBERT",
+                        help="Sentence-transformers model for Dense Legal baseline (default: law-ai/InLegalBERT)")
+    parser.add_argument("--cortex-embedding-model", default="all-MiniLM-L6-v2",
+                        help="Sentence-transformers model for CORTEX semantic pruning (default: all-MiniLM-L6-v2)")
+    parser.add_argument("--judge-embedding-model", default="all-MiniLM-L6-v2",
+                        help="Sentence-transformers model for Judge RAG retrieval re-ranking (default: all-MiniLM-L6-v2)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
@@ -521,7 +655,7 @@ def main() -> None:
 
     selected_models = {m.strip().lower() for m in args.models.split(",") if m.strip()}
     valid = {
-        "naive", "bm25", "dense", "advanced",
+        "naive", "bm25", "dense", "dense-legal", "advanced",
         "cortex-pruner-only", "cortex-critic-only", "cortex", "judge",
     }
     unknown = selected_models.difference(valid)
@@ -583,9 +717,16 @@ def main() -> None:
             ))
 
         if "dense" in selected_models:
-            dense = run_dense(question)
+            dense = run_dense(question, model_name=args.dense_embedding_model)
             out_row.update(compute_comprehensive_metrics(
                 "Dense", dense, row, gold_ids, expected,
+                has_generator=False, encoder=_semantic_encoder,
+            ))
+
+        if "dense-legal" in selected_models:
+            dense_legal = run_dense(question, model_name=args.dense_legal_embedding_model)
+            out_row.update(compute_comprehensive_metrics(
+                "Dense_Legal", dense_legal, row, gold_ids, expected,
                 has_generator=False, encoder=_semantic_encoder,
             ))
 
@@ -597,6 +738,9 @@ def main() -> None:
                 enable_pruning=False,
                 enable_self_correction=False,
                 pruning_threshold=args.pruning_threshold,
+                synthesis_model=args.cortex_synthesis_model,
+                ollama_base_url=args.ollama_base_url,
+                embedding_model=args.cortex_embedding_model,
             )
             out_row.update(compute_comprehensive_metrics(
                 "Advanced", advanced, row, gold_ids, expected,
@@ -611,6 +755,9 @@ def main() -> None:
                 enable_pruning=True,
                 enable_self_correction=False,
                 pruning_threshold=args.pruning_threshold,
+                synthesis_model=args.cortex_synthesis_model,
+                ollama_base_url=args.ollama_base_url,
+                embedding_model=args.cortex_embedding_model,
             )
             cortex_pruner_expected = get_expected_answer(row, "Cortex_Pruner_Only", args.cortex_only_evals)
             out_row.update(compute_comprehensive_metrics(
@@ -626,6 +773,9 @@ def main() -> None:
                 enable_pruning=False,
                 enable_self_correction=True,
                 pruning_threshold=args.pruning_threshold,
+                synthesis_model=args.cortex_synthesis_model,
+                ollama_base_url=args.ollama_base_url,
+                embedding_model=args.cortex_embedding_model,
             )
             cortex_critic_expected = get_expected_answer(row, "Cortex_Critic_Only", args.cortex_only_evals)
             out_row.update(compute_comprehensive_metrics(
@@ -641,6 +791,9 @@ def main() -> None:
                 enable_pruning=True,
                 enable_self_correction=True,
                 pruning_threshold=args.pruning_threshold,
+                synthesis_model=args.cortex_synthesis_model,
+                ollama_base_url=args.ollama_base_url,
+                embedding_model=args.cortex_embedding_model,
             )
             cortex_main_expected = get_expected_answer(row, "Cortex", args.cortex_only_evals)
             out_row.update(compute_comprehensive_metrics(
@@ -659,6 +812,7 @@ def main() -> None:
                 neo4j_uri=args.neo4j_uri,
                 neo4j_user=args.neo4j_user,
                 neo4j_password=args.neo4j_password,
+                embedding_model=args.judge_embedding_model,
             )
             # Wrap in ModelOutput for comprehensive metrics
             judge_model_out = ModelOutput(
@@ -686,7 +840,8 @@ def main() -> None:
         # Token efficiency ratios (relative to Naive baseline)
         naive_tokens = float(out_row.get("Naive_Context_Tokens", 0) or 0)
         for model_key, sel_key in [
-            ("BM25", "bm25"), ("Dense", "dense"), ("Advanced", "advanced"),
+            ("BM25", "bm25"), ("Dense", "dense"), ("Dense_Legal", "dense-legal"),
+            ("Advanced", "advanced"),
             ("Cortex_Pruner_Only", "cortex-pruner-only"),
             ("Cortex_Critic_Only", "cortex-critic-only"),
             ("Cortex", "cortex"), ("Judge", "judge"),
@@ -706,18 +861,20 @@ def main() -> None:
 
     # ── Build separate metric CSVs per group ───────────────────────────────
     all_model_prefixes = [
-        "Naive", "BM25", "Dense", "Advanced",
+        "Naive", "BM25", "Dense", "Dense_Legal", "Advanced",
         "Cortex_Pruner_Only", "Cortex_Critic_Only", "Cortex", "Judge",
     ]
     active_prefixes = [
         p for p in all_model_prefixes
         if any(c.startswith(f"{p}_") for c in results_df.columns)
     ]
+    active_retrieval_only = [p for p in active_prefixes if p in RETRIEVAL_ONLY]
+    active_generative = [p for p in active_prefixes if p not in RETRIEVAL_ONLY]
 
     # Helper: extract per-model average for given metric suffixes
-    def _model_avgs(metric_suffixes: list[str]) -> list[dict[str, Any]]:
+    def _model_avgs(metric_suffixes: list[str], models: list[str] | None = None) -> list[dict[str, Any]]:
         rows = []
-        for model in active_prefixes:
+        for model in (models if models is not None else active_prefixes):
             r: dict[str, Any] = {
                 "model": model,
                 "model_display": MODEL_DISPLAY_NAMES.get(model, model),
@@ -736,46 +893,40 @@ def main() -> None:
 
     # 1. Retrieval Source Identification
     source_metrics = _model_avgs([
-        "doc_accuracy", "article_accuracy", "paragraph_accuracy",
+        "doc_accuracy", "article_accuracy",
         "doc_hit", "article_hit", "paragraph_hit",
     ])
     pd.DataFrame(source_metrics).to_csv(artifact_dir / "retrieval_source_metrics.csv", index=False)
 
     # 2. Retrieval Text Quality (Correct Answer overlap)
     text_metrics = _model_avgs([
-        "retrieval_token_precision", "retrieval_token_recall", "retrieval_token_f1",
-        "retrieval_rouge1_f1", "retrieval_rouge1_recall",
-        "retrieval_rouge2_f1", "retrieval_rouge2_recall",
-        "retrieval_rouge_l_f1", "retrieval_rouge_l_recall",
+        "retrieval_token_recall",
+        "retrieval_rouge_l_f1",
         "retrieval_exact_containment", "retrieval_substring_containment",
     ])
     pd.DataFrame(text_metrics).to_csv(artifact_dir / "retrieval_text_metrics.csv", index=False)
 
     # 3. Retrieval MCQ
     mcq_metrics = _model_avgs([
-        "mcq_accuracy", "mcq_correct_rank", "mcq_mrr",
-        "mcq_margin", "mcq_normalized_margin", "mcq_discrimination_score",
+        "mcq_accuracy", "mcq_mrr",
     ])
     pd.DataFrame(mcq_metrics).to_csv(artifact_dir / "retrieval_mcq_metrics.csv", index=False)
 
     # 4. Golden ID Retrieval
     id_metrics = _model_avgs([
-        "id_precision", "id_recall", "id_f1", "id_jaccard",
-        "id_hit_at_1", "id_hit_at_3", "id_hit_at_5",
+        "id_precision", "id_recall", "id_f1",
+        "id_hit_at_5",
         "id_mrr", "id_map",
-        "id_ndcg_at_3", "id_ndcg_at_5", "id_ndcg_at_10",
     ])
     pd.DataFrame(id_metrics).to_csv(artifact_dir / "retrieval_id_metrics.csv", index=False)
 
-    # 5. Generator Quality
+    # 5. Generator Quality (generative models only)
     gen_metrics = _model_avgs([
-        "gen_exact_match", "gen_token_precision", "gen_token_recall", "gen_token_f1",
-        "gen_rouge1_precision", "gen_rouge1_recall", "gen_rouge1_f1",
-        "gen_rouge2_precision", "gen_rouge2_recall", "gen_rouge2_f1",
-        "gen_rouge_l_precision", "gen_rouge_l_recall", "gen_rouge_l_f1",
+        "gen_token_f1",
+        "gen_rouge_l_f1",
         "gen_bleu", "gen_meteor", "gen_length_ratio",
-        "gen_semantic_similarity", "gen_bertscore_precision", "gen_bertscore_recall", "gen_bertscore_f1",
-    ])
+        "gen_semantic_similarity", "gen_bertscore_f1",
+    ], models=active_generative)
     pd.DataFrame(gen_metrics).to_csv(artifact_dir / "generator_metrics.csv", index=False)
 
     # 6. Efficiency + Context metrics
@@ -801,15 +952,16 @@ def main() -> None:
                 vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
                 row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
 
-        # Key generation metrics
-        for metric in [
-            "gen_exact_match", "gen_token_f1", "gen_rouge_l_f1", "gen_bleu", "gen_meteor",
-            "gen_semantic_similarity", "gen_bertscore_f1",
-        ]:
-            col = f"{model_name}_{metric}"
-            if col in results_df.columns:
-                vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
-                row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
+        # Key generation metrics (generative models only)
+        if model_name not in RETRIEVAL_ONLY:
+            for metric in [
+                "gen_token_f1", "gen_rouge_l_f1", "gen_bleu", "gen_meteor",
+                "gen_semantic_similarity", "gen_bertscore_f1",
+            ]:
+                col = f"{model_name}_{metric}"
+                if col in results_df.columns:
+                    vals = pd.to_numeric(results_df[col], errors="coerce").dropna()
+                    row_summary[f"avg_{metric}"] = float(vals.mean()) if len(vals) else None
 
         # Efficiency
         for metric in ["Context_Tokens", "Token_Efficiency_Ratio"]:
@@ -846,7 +998,10 @@ def main() -> None:
         "input_file": str(Path(args.input).name),
         "total_questions": len(results_df),
         "models_evaluated": sorted(selected_models),
-        "embedding_model": "all-MiniLM-L6-v2",
+        "embedding_model": args.dense_embedding_model,
+        "dense_legal_model": args.dense_legal_embedding_model if "dense-legal" in selected_models else None,
+        "cortex_embedding_model": args.cortex_embedding_model,
+        "judge_embedding_model": args.judge_embedding_model if "judge" in selected_models else None,
         "judge_rag": {
             "retrieval_model": args.judge_rag_retrieval_model,
             "generation_model": args.judge_rag_generation_model,
@@ -855,6 +1010,7 @@ def main() -> None:
         },
         "cortex": {
             "pruning_threshold": args.pruning_threshold,
+            "synthesis_model": args.cortex_synthesis_model or "(template-based, no LLM)",
         },
         "neo4j_uri": args.neo4j_uri,
         "metric_groups": [
@@ -865,10 +1021,14 @@ def main() -> None:
             "generator_metrics.csv",
             "efficiency_metrics.csv",
             "summary_metrics.csv",
+            "significance_tests.csv",
         ],
     }
     metadata_path = artifact_dir / "eval_metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2))
+
+    # ── Statistical significance tests (bootstrap paired) ──────────────────
+    _run_significance_tests(results_df, active_prefixes, artifact_dir)
 
     # ── Top-5 case studies (backward-compat) ───────────────────────────────
     case_cols = ["question", "expected_answer"]

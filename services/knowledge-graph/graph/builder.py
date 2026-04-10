@@ -46,7 +46,7 @@ _REG_META: dict[str, dict[str, str]] = {
         "eur_lex_url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng",
     },
     "dsa": {
-        "id": "dsa",
+        "id": "eu_dsa_act",
         "short_name": "DSA",
         "title_formal": "Regulation (EU) 2022/2065",
         "celex": "32022R2065",

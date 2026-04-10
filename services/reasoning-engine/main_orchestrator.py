@@ -74,6 +74,9 @@ def run_cortex_engine(
     enable_pruning: bool = True,
     enable_self_correction: bool = True,
     pruning_threshold: float = 0.45,
+    synthesis_model: str = "",
+    ollama_base_url: str = "http://localhost:11434",
+    embedding_model: str = "",
 ):
     start_time = time.time()
 
@@ -108,7 +111,10 @@ def run_cortex_engine(
 
         # 2. Semantic Pruning Layer
         if enable_pruning:
-            state = pruning_node(state, threshold=pruning_threshold)
+            pruning_kwargs = {"threshold": pruning_threshold}
+            if embedding_model:
+                pruning_kwargs["embedding_model"] = embedding_model
+            state = pruning_node(state, **pruning_kwargs)
         else:
             # Ablation mode: bypass semantic pruning and keep all retrieved context.
             state["pruned_context"] = list(state["retrieved_nodes"])
@@ -162,7 +168,11 @@ def run_cortex_engine(
     state["metrics"]["latency_seconds"] = round(time.time() - start_time, 2)
 
     # --- SYNTHESIS LAYER ---
-    state = synthesis_node(state)
+    state = synthesis_node(
+        state,
+        synthesis_model=synthesis_model,
+        ollama_base_url=ollama_base_url,
+    )
 
     # --- SCHEMA HANDSHAKE FORMATTING ---
     formatted_steps = []
@@ -178,6 +188,11 @@ def run_cortex_engine(
             }
         )
 
+    # Build the full retrieved context from pruned nodes for downstream evaluation
+    retrieved_context = "\n\n".join(
+        n.get("content", "") for n in state["pruned_context"] if n.get("content")
+    )
+
     # Return structure mapped for Gateway (Handshake Sync with WebUI Schema)
     return {
         "query_id": f"query_{int(time.time())}",
@@ -187,6 +202,7 @@ def run_cortex_engine(
         "reasoning_steps": formatted_steps,
         "graph_data": {"nodes": [], "edges": []},
         "citations": [f"{n['id']} ({n['regulation'].upper()})" for n in state["pruned_context"]],
+        "retrieved_context": retrieved_context,
         "metrics": {
             "reasoning_steps": len(formatted_steps),
             "tokens_saved": int(state["metrics"]["tokens_saved"]),

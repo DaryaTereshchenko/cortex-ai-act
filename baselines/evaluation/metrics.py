@@ -320,6 +320,8 @@ def mcq_retrieval_metrics(
     Uses token-level overlap to score each option against the retrieved context,
     then computes ranking-based metrics.
     """
+    import random as _rng
+
     context = _sanitize(retrieved_context)
     correct = _sanitize(correct_answer)
 
@@ -345,7 +347,14 @@ def mcq_retrieval_metrics(
     alt_scores = scores[1:]
 
     # Rank (1-based; rank=1 means correct answer has highest similarity)
-    sorted_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    # Use deterministic random tie-breaking to avoid positional bias when
+    # all options score identically (e.g. zero overlap with citation-only context).
+    tie_breaker = _rng.Random(42)
+    sorted_indices = sorted(
+        range(len(scores)),
+        key=lambda i: (scores[i], tie_breaker.random()),
+        reverse=True,
+    )
     rank = sorted_indices.index(0) + 1
 
     best_alt_score = max(alt_scores) if alt_scores else 0.0
@@ -553,9 +562,6 @@ def generator_statistical_metrics(
     gen_tokens = _tokenize(generated)
     exp_tokens = _tokenize(expected)
 
-    # Exact match
-    em = 1.0 if _normalize(generated) == _normalize(expected) else 0.0
-
     # Token F1
     prec, rec, f1 = _token_overlap(gen_tokens, exp_tokens)
 
@@ -574,7 +580,6 @@ def generator_statistical_metrics(
     length_ratio = len(gen_tokens) / len(exp_tokens) if exp_tokens else 0.0
 
     return {
-        "gen_exact_match": em,
         "gen_token_precision": prec,
         "gen_token_recall": rec,
         "gen_token_f1": f1,
