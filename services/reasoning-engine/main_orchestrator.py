@@ -70,7 +70,7 @@ class KGConnector:
 def run_cortex_engine(
     user_query: str,
     *,
-    max_hops: int = 3,
+    max_hops: int = 2,
     enable_pruning: bool = True,
     enable_self_correction: bool = True,
     pruning_threshold: float = 0.45,
@@ -167,17 +167,25 @@ def run_cortex_engine(
     # --- SCHEMA HANDSHAKE FORMATTING ---
     formatted_steps = []
     for i, step in enumerate(state["reasoning_trace"]):
+        # Map the internal trace message to a Web-UI recognized Agent role
+        agent_name = "Retriever" # Default
+        if any(keyword in step for keyword in ["Critic", "Validation", "missing context"]):
+            agent_name = "Critic"
+        elif any(keyword in step for keyword in ["SYNTHESIZING", "QWEN", "GENERATING"]):
+            agent_name = "Synthesizer"
+
         formatted_steps.append(
             {
                 "step_number": int(i + 1),
-                "agent": "Cortex",
+                "agent": agent_name, 
                 "action": str(step),
                 "retrieved_nodes": [str(n["id"]) for n in state["pruned_context"]],
-                "entropy_reduction": 0.0,
+                "entropy_reduction": 0.0, 
                 "timestamp": datetime.now().isoformat(),
             }
         )
 
+    
     # Return structure mapped for Gateway (Handshake Sync with WebUI Schema)
     return {
         "query_id": f"query_{int(time.time())}",
