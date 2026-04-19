@@ -1,0 +1,2 @@
+model,model_display,avg_mcq_accuracy,std_mcq_accuracy,avg_mcq_mrr,std_mcq_mrr
+Judge,Judge,0.565,0.4970010565896779,0.606,0.46394889396829625

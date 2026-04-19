@@ -16,6 +16,7 @@ import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer, util
 
+from baselines.model_registry import get_model as _registry_get_model
 from .config import Chunk, JudgeRAGConfig, RetrievedChunk
 
 log = logging.getLogger(__name__)
@@ -33,9 +34,9 @@ class HybridRetriever:
         self._corpus_tokens = [c["text"].lower().split() for c in chunks]
         self._bm25 = BM25Okapi(self._corpus_tokens)
 
-        # Dense encoder
+        # Dense encoder — shared via centralized registry
         log.info("Loading embedding model '%s' …", cfg.embedding_model)
-        self._encoder = SentenceTransformer(cfg.embedding_model)
+        self._encoder = _registry_get_model(cfg.embedding_model)
 
         # Pre-compute chunk embeddings
         log.info("Encoding chunk embeddings …")

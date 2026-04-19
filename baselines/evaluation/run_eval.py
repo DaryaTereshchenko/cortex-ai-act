@@ -36,12 +36,13 @@ from baselines.evaluation.metrics import (
 from baselines.judge_rag.config import JudgeRAGConfig
 from baselines.judge_rag.pipeline import run_judge_rag
 from baselines.naive_baseline import run_naive_rag_benchmark
+from baselines.model_registry import cleanup as _cleanup_models, unload as _unload_model
 
 
 MODEL_DISPLAY_NAMES = {
     "Naive": "Naive (Neo4j full-text lexical baseline)",
     "BM25": "BM25 (rank_bm25 lexical baseline)",
-    "Dense": "Dense Embedding (all-MiniLM-L6-v2 semantic retrieval baseline)",
+    "Dense": "Dense Embedding (BAAI/bge-small-en-v1.5 semantic retrieval baseline)",
     "Dense_Legal": "Dense Legal (InLegalBERT domain-adapted semantic baseline)",
     "Advanced": "Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",
     "Cortex_Pruner_Only": "Cortex Pruner Only (pruning=on, critic=off)",
@@ -430,7 +431,7 @@ def run_judge(
     neo4j_uri: str,
     neo4j_user: str,
     neo4j_password: str,
-    embedding_model: str = "all-MiniLM-L6-v2",
+    embedding_model: str = "BAAI/bge-small-en-v1.5",
 ) -> JudgeModelOutput:
     cfg = JudgeRAGConfig(
         regulation=regulation,
@@ -477,6 +478,106 @@ def run_judge(
 
 def ensure_artifact_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+# ── Subprocess-stages helpers ──────────────────────────────────────────────
+
+RETRIEVAL_STAGE_MODELS = {"naive", "bm25", "dense", "dense-legal"}
+CORTEX_STAGE_MODELS = {"advanced", "cortex-pruner-only", "cortex-critic-only", "cortex"}
+JUDGE_STAGE_MODELS = {"judge"}
+
+
+def _stage_groups(selected: set[str]) -> dict[str, set[str]]:
+    """Partition *selected* models into disjoint stage groups."""
+    groups: dict[str, set[str]] = {}
+    ret = selected & RETRIEVAL_STAGE_MODELS
+    if ret:
+        groups["retrieval"] = ret
+    ctx = selected & CORTEX_STAGE_MODELS
+    if ctx:
+        groups["cortex"] = ctx
+    jdg = selected & JUDGE_STAGE_MODELS
+    if jdg:
+        groups["judge"] = jdg
+    return groups
+
+
+def _run_subprocess_stages(args: argparse.Namespace, selected: set[str]) -> None:
+    """Run each stage group in a fresh sub-process, then merge the per-question CSVs."""
+    import subprocess as _sp
+
+    groups = _stage_groups(selected)
+    artifact_dir = Path(args.artifact_dir)
+    ensure_artifact_dir(artifact_dir)
+
+    stage_csvs: list[Path] = []
+    for group_name, group_models in groups.items():
+        stage_artifact = artifact_dir / f"_stage_{group_name}"
+        ensure_artifact_dir(stage_artifact)
+
+        # Build the command line, forwarding all flags
+        cmd = [
+            sys.executable, str(Path(__file__).resolve()),
+            "--input", args.input,
+            "--max-rows", str(args.max_rows),
+            "--artifact-dir", str(stage_artifact),
+            "--pruning-threshold", str(args.pruning_threshold),
+            "--models", ",".join(sorted(group_models)),
+            "--judge-rag-retrieval-model", args.judge_rag_retrieval_model,
+            "--judge-rag-generation-model", args.judge_rag_generation_model,
+            "--judge-rag-judge-model", args.judge_rag_judge_model,
+            "--cortex-synthesis-model", args.cortex_synthesis_model,
+            "--dense-embedding-model", args.dense_embedding_model,
+            "--dense-legal-embedding-model", args.dense_legal_embedding_model,
+            "--cortex-embedding-model", args.cortex_embedding_model,
+            "--judge-embedding-model", args.judge_embedding_model,
+            "--ollama-base-url", args.ollama_base_url,
+            "--neo4j-uri", args.neo4j_uri,
+            "--neo4j-user", args.neo4j_user,
+            "--neo4j-password", args.neo4j_password,
+            "--_stage-group", group_name,
+        ]
+        if args.cortex_only_evals:
+            cmd.append("--cortex-only-evals")
+
+        print(f"\n{'='*60}")
+        print(f"  SUBPROCESS STAGE: {group_name}  (models: {sorted(group_models)})")
+        print(f"{'='*60}\n")
+
+        proc = _sp.run(cmd)
+        if proc.returncode != 0:
+            print(f"WARNING: stage '{group_name}' exited with code {proc.returncode}")
+
+        csv_path = stage_artifact / "results_per_question.csv"
+        if csv_path.exists():
+            stage_csvs.append(csv_path)
+
+    # Merge per-question CSVs from all stages
+    if stage_csvs:
+        merged = None
+        for csv_path in stage_csvs:
+            stage_df = pd.read_csv(csv_path)
+            if merged is None:
+                merged = stage_df
+            else:
+                # Join on row_index, question — the shared columns
+                shared_cols = ["row_index", "question", "expected_answer", "golden_ids",
+                               "regulation", "doc", "chapter", "article", "paragraph"]
+                extra_cols = [c for c in stage_df.columns if c not in shared_cols]
+                merged = merged.merge(
+                    stage_df[["row_index"] + extra_cols],
+                    on="row_index",
+                    how="outer",
+                    suffixes=("", "_dup"),
+                )
+                # Drop any _dup columns from overlapping non-shared columns
+                merged = merged[[c for c in merged.columns if not c.endswith("_dup")]]
+
+        if merged is not None:
+            merged.to_csv(artifact_dir / "results_per_question.csv", index=False)
+            print(f"\nMerged results written to {artifact_dir / 'results_per_question.csv'}")
+    else:
+        print("WARNING: no stage produced results_per_question.csv")
 
 
 def _bootstrap_ci(
@@ -635,22 +736,33 @@ def main() -> None:
                         help="Ollama model for Judge RAG query rewriting (default: llama3.1:8b)")
     parser.add_argument("--judge-rag-generation-model", default="llama3.1:8b",
                         help="Ollama model for Judge RAG answer generation (default: llama3.1:8b)")
-    parser.add_argument("--judge-rag-judge-model", default="phi4:latest",
-                        help="Ollama model for Judge RAG judge evaluation (default: phi4:latest)")
+    parser.add_argument("--judge-rag-judge-model", default="llama3.1:8b",
+                        help="Ollama model for Judge RAG judge evaluation (default: llama3.1:8b)")
     parser.add_argument("--cortex-synthesis-model", default="",
                         help="Ollama model for CORTEX synthesis (empty = template-based, no LLM)")
-    parser.add_argument("--dense-embedding-model", default="all-MiniLM-L6-v2",
-                        help="Sentence-transformers model for Dense baseline (default: all-MiniLM-L6-v2)")
+    parser.add_argument("--dense-embedding-model", default="BAAI/bge-small-en-v1.5",
+                        help="Sentence-transformers model for Dense baseline (default: BAAI/bge-small-en-v1.5)")
     parser.add_argument("--dense-legal-embedding-model", default="law-ai/InLegalBERT",
                         help="Sentence-transformers model for Dense Legal baseline (default: law-ai/InLegalBERT)")
-    parser.add_argument("--cortex-embedding-model", default="all-MiniLM-L6-v2",
-                        help="Sentence-transformers model for CORTEX semantic pruning (default: all-MiniLM-L6-v2)")
-    parser.add_argument("--judge-embedding-model", default="all-MiniLM-L6-v2",
-                        help="Sentence-transformers model for Judge RAG retrieval re-ranking (default: all-MiniLM-L6-v2)")
+    parser.add_argument("--cortex-embedding-model", default="BAAI/bge-small-en-v1.5",
+                        help="Sentence-transformers model for CORTEX semantic pruning (default: BAAI/bge-small-en-v1.5)")
+    parser.add_argument("--judge-embedding-model", default="BAAI/bge-small-en-v1.5",
+                        help="Sentence-transformers model for Judge RAG retrieval re-ranking (default: BAAI/bge-small-en-v1.5)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434")
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default="changeme")
+    parser.add_argument(
+        "--subprocess-stages",
+        action="store_true",
+        default=False,
+        help=(
+            "Run pipeline stage groups (retrieval, cortex, judge) in separate "
+            "sub-processes so each group gets a clean memory space."
+        ),
+    )
+    # Internal flag: when set, run only the specified stage group
+    parser.add_argument("--_stage-group", default="", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     selected_models = {m.strip().lower() for m in args.models.split(",") if m.strip()}
@@ -661,6 +773,17 @@ def main() -> None:
     unknown = selected_models.difference(valid)
     if unknown:
         raise ValueError(f"Unknown model(s): {sorted(unknown)}. Valid: {sorted(valid)}")
+
+    # ── Subprocess-stages mode: split models into groups and run each in a
+    #    separate process so they don't share memory.
+    if args.subprocess_stages and not args._stage_group:
+        _run_subprocess_stages(args, selected_models)
+        return
+
+    # If running as a stage sub-process, narrow selected_models to the group.
+    if args._stage_group:
+        stage_map = _stage_groups(selected_models)
+        selected_models = stage_map.get(args._stage_group, selected_models)
 
     df = load_eval_dataframe(Path(args.input))
     if args.max_rows and args.max_rows > 0:
@@ -678,7 +801,7 @@ def main() -> None:
     if has_generation_model:
         try:
             from sentence_transformers import SentenceTransformer
-            _semantic_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+            _semantic_encoder = SentenceTransformer("BAAI/bge-small-en-v1.5")
         except ImportError:
             print("WARNING: sentence-transformers not available; semantic metrics will be NaN")
 
@@ -729,6 +852,12 @@ def main() -> None:
                 "Dense_Legal", dense_legal, row, gold_ids, expected,
                 has_generator=False, encoder=_semantic_encoder,
             ))
+
+        # Free dense embedding models before CORTEX stages
+        _stage_models = {args.dense_embedding_model, args.dense_legal_embedding_model}
+        _cortex_models = {args.cortex_embedding_model, args.judge_embedding_model}
+        for _m in _stage_models - _cortex_models:
+            _unload_model(_m)
 
         if "advanced" in selected_models:
             advanced = run_advanced(
@@ -801,6 +930,10 @@ def main() -> None:
                 has_generator=True, encoder=_semantic_encoder,
             ))
 
+        # Free CORTEX embedding model before Judge stage if different
+        if args.cortex_embedding_model != args.judge_embedding_model:
+            _unload_model(args.cortex_embedding_model)
+
         if "judge" in selected_models:
             judge_out = run_judge(
                 question=question,
@@ -854,6 +987,9 @@ def main() -> None:
 
         rows_out.append(out_row)
         print(f"[{len(rows_out):03d}] Completed: {question[:70]}")
+
+        # Free all embedding models between questions to bound peak memory
+        _cleanup_models()
 
     results_df = pd.DataFrame(rows_out)
     results_path = artifact_dir / "results_per_question.csv"

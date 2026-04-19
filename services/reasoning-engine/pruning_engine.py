@@ -1,17 +1,22 @@
+import sys
+from pathlib import Path
+
 from sentence_transformers import SentenceTransformer, util
 
 from engine_schema import GraphState
 
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Ensure baselines package is importable
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
-# Lazy-loaded model cache keyed by model name
-_models: dict[str, SentenceTransformer] = {}
+from baselines.model_registry import get_model as _registry_get_model
+
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 
 def _get_model(model_name: str = DEFAULT_EMBEDDING_MODEL) -> SentenceTransformer:
-    if model_name not in _models:
-        _models[model_name] = SentenceTransformer(model_name)
-    return _models[model_name]
+    return _registry_get_model(model_name)
 
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER ---
 

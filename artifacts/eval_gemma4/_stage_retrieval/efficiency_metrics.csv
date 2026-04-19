@@ -1,0 +1,5 @@
+model,model_display,avg_Context_Tokens,std_Context_Tokens,avg_Token_Efficiency_Ratio,std_Token_Efficiency_Ratio
+Naive,Naive (Neo4j full-text lexical baseline),2669.17,1071.113951259582,,
+BM25,BM25 (rank_bm25 lexical baseline),3064.715,1248.333443316936,1.2149231054543135,0.4410092140461849
+Dense,Dense Embedding (BAAI/bge-small-en-v1.5 semantic retrieval baseline),2292.205,941.6303155863005,0.9546406198846634,0.48256280173392985
+Dense_Legal,Dense Legal (InLegalBERT domain-adapted semantic baseline),1121.08,416.6534821900635,0.47634711975183647,0.24120842300434545

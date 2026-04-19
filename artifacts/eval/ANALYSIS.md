@@ -116,7 +116,7 @@ Multiple-choice accuracy: can the retrieved context distinguish the correct answ
 
 | Metric | Mean Score (1–10) |
 |--------|:-----------------:|
-| Overall LLM Score | 8.25 |
+| Overall LLM Score | 8.25 |d
 | Relevance | 8.75 |
 | Faithfulness | 8.14 |
 | Completeness | 6.79 |

@@ -1,0 +1,3 @@
+model,model_display,avg_mcq_accuracy,std_mcq_accuracy,avg_mcq_mrr,std_mcq_mrr
+Advanced,"Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",0.94,0.23808279460185097,0.9634166666666667,0.1488528393527018
+Cortex,"Cortex Main (CORTEX pipeline; pruning=on, critic=on)",0.94,0.23808279460185097,0.9634166666666667,0.1488528393527018

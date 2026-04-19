@@ -1,0 +1,2 @@
+model,model_display,avg_gen_token_f1,std_gen_token_f1,avg_gen_rouge_l_f1,std_gen_rouge_l_f1,avg_gen_bleu,std_gen_bleu,avg_gen_meteor,std_gen_meteor,avg_gen_length_ratio,std_gen_length_ratio,avg_gen_semantic_similarity,std_gen_semantic_similarity,avg_gen_bertscore_f1,std_gen_bertscore_f1
+Judge,Judge,0.22388292322532805,0.12030688750176656,0.18173274575587514,0.11219176673890095,0.03389186494477457,0.06324033653055768,0.3508393507150508,0.1722106113144347,3.9030213285942854,5.286131047845634,0.8111640939480891,0.07346904781917502,0.7365947578493265,0.06355628937077558

@@ -1,0 +1,3 @@
+model,model_display,avg_retrieval_token_recall,std_retrieval_token_recall,avg_retrieval_rouge_l_f1,std_retrieval_rouge_l_f1,avg_retrieval_exact_containment,std_retrieval_exact_containment,avg_retrieval_substring_containment,std_retrieval_substring_containment
+Advanced,"Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",0.8230652959654727,0.15893598231753367,0.02348269465400118,0.014031384067842587,0.065,0.247144496216384,0.311214545989253,0.2613000845571865
+Cortex,"Cortex Main (CORTEX pipeline; pruning=on, critic=on)",0.8266423070875907,0.15614149473236433,0.02243718228652982,0.012840645826739324,0.065,0.247144496216384,0.3114526412273483,0.2611239347808454

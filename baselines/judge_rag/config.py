@@ -22,8 +22,8 @@ class JudgeRAGConfig:
     # Ollama models (caller picks any model available on the local Ollama server)
     retrieval_model: str = "llama3.1:8b"
     generation_model: str = "llama3.1:8b"
-    judge_model: str = "phi4:latest"
-    query_rewrite_model: str = "phi4:latest"
+    judge_model: str = "llama3.1:8b"
+    query_rewrite_model: str = "llama3.1:8b"
 
     # Ollama endpoint
     ollama_base_url: str = "http://localhost:11434"
@@ -40,7 +40,7 @@ class JudgeRAGConfig:
     similarity_threshold: float = 0.35
 
     # Embedding model for semantic re-ranking
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     # Query rewriting
     enable_query_rewriting: bool = True

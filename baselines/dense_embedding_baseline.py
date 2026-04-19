@@ -10,8 +10,10 @@ URI = "bolt://localhost:7687"
 USER = "neo4j"
 PASSWORD = "changeme"
 
+from baselines.model_registry import get_model as _registry_get_model
+
 # Default and supported embedding models
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 LEGAL_EMBEDDING_MODEL = "law-ai/InLegalBERT"
 
 
@@ -30,21 +32,8 @@ def _normalize(vec: list[float]) -> list[float]:
     return [v / norm for v in vec]
 
 
-_model_cache: dict[str, Any] = {}
-
-
 def _load_embedding_model(model_name: str = DEFAULT_EMBEDDING_MODEL):
-    if model_name in _model_cache:
-        return _model_cache[model_name]
-    try:
-        st_module = __import__("sentence_transformers")
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "Missing dependency 'sentence-transformers'. Install with: pip install -r baselines/requirements.txt"
-        ) from exc
-    model = st_module.SentenceTransformer(model_name)
-    _model_cache[model_name] = model
-    return model
+    return _registry_get_model(model_name)
 
 
 # Cache per model name to avoid re-encoding articles for each query

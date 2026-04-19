@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # so this only downloads if the host cache is empty.
 RUN python -c "\
 from sentence_transformers import SentenceTransformer; \
-SentenceTransformer('all-MiniLM-L6-v2')"
+SentenceTransformer('BAAI/bge-small-en-v1.5')"
 
 COPY services/reasoning-engine/ .
 

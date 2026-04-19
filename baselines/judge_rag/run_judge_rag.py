@@ -98,8 +98,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--embedding-model",
-        default="all-MiniLM-L6-v2",
-        help="Sentence-transformers model for re-ranking (default: all-MiniLM-L6-v2)",
+        default="BAAI/bge-small-en-v1.5",
+        help="Sentence-transformers model for re-ranking (default: BAAI/bge-small-en-v1.5)",
     )
 
     # Query rewriting

@@ -621,7 +621,7 @@ def generator_semantic_metrics(
     if encoder is None:
         try:
             from sentence_transformers import SentenceTransformer
-            encoder = SentenceTransformer("all-MiniLM-L6-v2")
+            encoder = SentenceTransformer("BAAI/bge-small-en-v1.5")
         except ImportError:
             return {
                 "gen_semantic_similarity": float("nan"),
