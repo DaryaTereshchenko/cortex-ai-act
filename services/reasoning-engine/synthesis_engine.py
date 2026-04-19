@@ -61,8 +61,7 @@ def _llm_synthesis(
     context_block = "\n\n---\n\n".join(context_parts)
 
     user_message = (
-        f"## Retrieved Legal Context\n\n{context_block}\n\n"
-        f"## Question\n\n{state['query']}"
+        f"## Retrieved Legal Context\n\n{context_block}\n\n## Question\n\n{state['query']}"
     )
 
     client = ollama.Client(host=ollama_base_url)
@@ -76,9 +75,7 @@ def _llm_synthesis(
     )
 
     state["final_answer"] = response["message"]["content"].strip()
-    state["reasoning_trace"].append(
-        f"Synthesizer: LLM response generated via {model}."
-    )
+    state["reasoning_trace"].append(f"Synthesizer: LLM response generated via {model}.")
     log.info("LLM synthesis (%s): %d chars", model, len(state["final_answer"]))
     return state
 

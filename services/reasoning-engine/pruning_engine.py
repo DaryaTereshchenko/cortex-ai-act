@@ -18,10 +18,13 @@ DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 def _get_model(model_name: str = DEFAULT_EMBEDDING_MODEL) -> SentenceTransformer:
     return _registry_get_model(model_name)
 
+
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER ---
 
 
-def pruning_node(state: GraphState, threshold=0.45, embedding_model: str = DEFAULT_EMBEDDING_MODEL) -> GraphState:
+def pruning_node(
+    state: GraphState, threshold=0.45, embedding_model: str = DEFAULT_EMBEDDING_MODEL
+) -> GraphState:
     """
     Innovation 1: Semantic Entropy Pruning.
     Filters retrieved nodes based on their semantic relevance to the query.

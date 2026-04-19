@@ -46,5 +46,11 @@ mlruns/
 *.safetensors
 *.bin
 
+# ── Caches (HuggingFace / sentence-transformers, created by Docker) ──────────
+.cache/
+
+# ── Docker-generated init files ──────────────────────────────────────────────
+docker/neo4j/init-cypher/
+
 # ── Extracted data ───────────────────────────────────────────────────────────
 
