@@ -10,7 +10,7 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from baselines.model_registry import get_model as _registry_get_model
+from baselines.model_registry import get_model as _registry_get_model  # noqa: E402
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 

@@ -6,7 +6,8 @@ import os
 
 from fastapi import FastAPI
 
-from reasoning_api import ReasonRequest, reason as reason_handler
+from reasoning_api import ReasonRequest
+from reasoning_api import reason as reason_handler
 
 app = FastAPI(
     title="CORTEX Reasoning Engine",

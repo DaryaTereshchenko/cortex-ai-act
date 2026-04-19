@@ -1214,9 +1214,7 @@ class GraphBuilder:
 
     # -- Recital ↔ Article references (text-mined) ----------------------------
 
-    def _batch_recital_article_references(
-        self, recitals: list[dict], reg_id: str
-    ) -> None:
+    def _batch_recital_article_references(self, recitals: list[dict], reg_id: str) -> None:
         """Parse Article mentions in recital text and create REFERENCES edges."""
         if not recitals:
             return
