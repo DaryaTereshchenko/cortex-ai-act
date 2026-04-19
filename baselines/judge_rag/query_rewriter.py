@@ -39,18 +39,32 @@ def rewrite_query(query: str, cfg: JudgeRAGConfig) -> list[str]:
 
     try:
         response = ollama.chat(
-            model=cfg.retrieval_model,
+            model=cfg.query_rewrite_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": query},
             ],
             options={"temperature": 0.3, "num_predict": 512},
         )
-        content = response["message"]["content"].strip()
+        raw_content = response["message"]["content"]
+        log.debug("Raw query rewrite response: %r", raw_content)
+        content = raw_content.strip()
 
-        # Parse JSON array from response (tolerant of markdown fences)
+        # Strip markdown fences and any surrounding text
         content = re.sub(r"```json\s*", "", content)
-        content = re.sub(r"```\s*$", "", content)
+        content = re.sub(r"```\s*", "", content)
+
+        # Extract the first JSON array from the response
+        match = re.search(r"\[.*\]", content, re.DOTALL)
+        if match:
+            content = match.group(0)
+        else:
+            log.warning("No JSON array found in rewrite response: %r", raw_content)
+            return [query]
+
+        # Remove control characters that some models inject
+        content = re.sub(r"[\x00-\x09\x0b\x0c\x0e-\x1f]", "", content)
+
         parsed = json.loads(content)
 
         if isinstance(parsed, list) and all(isinstance(s, str) for s in parsed):

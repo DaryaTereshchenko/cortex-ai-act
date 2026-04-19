@@ -13,14 +13,20 @@ def run_naive_rag_benchmark(query_text: str):
     cypher_query = """
     CALL db.index.fulltext.queryNodes("article_fulltext", $searchTerm)
     YIELD node, score
-    RETURN node.full_text AS text
+    RETURN node.id AS id, node.full_text AS text
     LIMIT 5
     """
 
     with GraphDatabase.driver(URI, auth=(USER, PASSWORD)) as driver, driver.session() as session:
         # Pass the query as 'searchTerm'
         result = session.run(cypher_query, searchTerm=query_text)
-        texts = [record["text"] for record in result if record["text"]]
+        ids = []
+        texts = []
+        for record in result:
+            if record["text"]:
+                texts.append(record["text"])
+                if record["id"]:
+                    ids.append(str(record["id"]))
 
     context_text = "\n\n".join(texts)
     word_count = len(context_text.split())
@@ -28,6 +34,7 @@ def run_naive_rag_benchmark(query_text: str):
     return {
         "nodes_found": len(texts),
         "total_word_count": word_count,
+        "retrieved_ids": ids,
         "retrieved_context": context_text,
     }
 

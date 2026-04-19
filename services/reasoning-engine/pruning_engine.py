@@ -1,14 +1,27 @@
+import sys
+from pathlib import Path
+
 from sentence_transformers import SentenceTransformer, util
 
 from engine_schema import GraphState
 
-# Standardized model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Ensure baselines package is importable
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from baselines.model_registry import get_model as _registry_get_model
+
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def _get_model(model_name: str = DEFAULT_EMBEDDING_MODEL) -> SentenceTransformer:
+    return _registry_get_model(model_name)
 
 # --- INNOVATION 1: SEMANTIC ENTROPY PRUNER ---
 
 
-def pruning_node(state: GraphState, threshold=0.45) -> GraphState:
+def pruning_node(state: GraphState, threshold=0.45, embedding_model: str = DEFAULT_EMBEDDING_MODEL) -> GraphState:
     """
     Innovation 1: Semantic Entropy Pruning.
     Filters retrieved nodes based on their semantic relevance to the query.
@@ -20,6 +33,7 @@ def pruning_node(state: GraphState, threshold=0.45) -> GraphState:
     if not raw_nodes:
         return state
 
+    model = _get_model(embedding_model)
     query_embedding = model.encode(state["query"], convert_to_tensor=True)
     pruned_context = []
 

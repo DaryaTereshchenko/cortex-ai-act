@@ -94,7 +94,7 @@ _VIEWS: dict[str, dict[str, str]] = {
     "Definitions - DSA": {
         "description": "Article 3 → all definitions (with sub-items)",
         "query": """
-            MATCH (a:Article {id: "dsa_art_3"})-[:CONTAINS]->(d:Definition)
+            MATCH (a:Article {id: "eu_dsa_act_art_3"})-[:CONTAINS]->(d:Definition)
             OPTIONAL MATCH (d)-[:CONTAINS]->(sp:SubParagraph)
             RETURN a, d, sp
         """,

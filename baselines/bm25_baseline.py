@@ -49,6 +49,9 @@ def _load_article_corpus() -> tuple[list[str], list[str], list[list[str]], Any]:
             ids.append(node_id)
             texts.append(text)
 
+    if not texts:
+        return ids, texts, [], None
+
     tokenized = [_tokenize(t) for t in texts]
     bm25 = _build_bm25(tokenized)
     return ids, texts, tokenized, bm25

@@ -1,0 +1,5 @@
+model,model_display,avg_mcq_accuracy,std_mcq_accuracy,avg_mcq_mrr,std_mcq_mrr
+Naive,Naive (Neo4j full-text lexical baseline),0.935,0.247144496216384,0.9609166666666666,0.15239203370735988
+BM25,BM25 (rank_bm25 lexical baseline),0.92,0.2719739863410307,0.9500833333333334,0.173007501217106
+Dense,Dense Embedding (BAAI/bge-small-en-v1.5 semantic retrieval baseline),0.895,0.3073226906378774,0.9360833333333332,0.1917824462774618
+Dense_Legal,Dense Legal (InLegalBERT domain-adapted semantic baseline),0.74,0.4397349590046876,0.8365833333333333,0.28324561406921595

@@ -1,0 +1,5 @@
+model,model_display,avg_Context_Tokens,std_Context_Tokens,avg_Token_Efficiency_Ratio,std_Token_Efficiency_Ratio
+Advanced,"Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",2546.195,1004.4540390469784,,
+Cortex_Pruner_Only,"Cortex Pruner Only (pruning=on, critic=off)",2546.195,1004.4540390469784,,
+Cortex_Critic_Only,"Cortex Critic Only (pruning=off, critic=on)",2637.415,1015.2150712927283,,
+Cortex,"Cortex Main (CORTEX pipeline; pruning=on, critic=on)",2626.96,1013.3476033553989,,
