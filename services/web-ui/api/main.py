@@ -239,17 +239,17 @@ async def _try_reasoning_engine(
 
     try:
         response = await app.state.http_client.post(
-            f"http://127.0.0.1:8002/api/reason", # Use 127.0.0.1 directly
+            "http://127.0.0.1:8002/api/reason",  # Use 127.0.0.1 directly
             json=payload,
-            timeout=None # Give it enough room
+            timeout=None,  # Give it enough room
         )
         if response.status_code >= 400:
             print(f"❌ Reasoning Engine returned error: {response.status_code}")
             return None
-        
+
         return response.json()
     except Exception as e:
-        print(f"❌ Connection to Reasoning Engine failed: {str(e)}")
+        print(f"❌ Connection to Reasoning Engine failed: {e!s}")
         return None
 
 

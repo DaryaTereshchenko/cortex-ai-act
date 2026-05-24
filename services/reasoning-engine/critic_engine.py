@@ -23,10 +23,9 @@ def critic_node(state: GraphState) -> GraphState:
 
     # 2. NEW: Graph-Aware Definition Check (NLLP Excellence)
     # Ensures that 'High-Risk' or 'Prohibited' rules have their definitions attached.
-    if has_article and "definition" not in context_text:
+    if has_article and "definition" not in context_text and len(state["query"].split()) > 8:
         # We only force this for complex queries where ambiguity is high
-        if len(state["query"].split()) > 8:
-            missing_requirements.append("Missing Legal Definitions for context")
+        missing_requirements.append("Missing Legal Definitions for context")
 
     # 3. Dynamic Term Coverage (F1 Booster)
     # Focuses on words > 5 chars to avoid noise from 'the', 'shall', etc.
@@ -37,9 +36,10 @@ def critic_node(state: GraphState) -> GraphState:
 
     # 4. Prohibition Keyword Guard (Negative Constraint Check)
     prohibition_keywords = ["prohibit", "forbidden", "ban", "not allowed", "stop"]
-    if any(k in state["query"].lower() for k in prohibition_keywords):
-        if not any(k in context_text for k in ["shall not", "prohibit", "ban", "article 5"]):
-            missing_requirements.append("Missing prohibitive legal language")
+    if any(k in state["query"].lower() for k in prohibition_keywords) and not any(
+        k in context_text for k in ["shall not", "prohibit", "ban", "article 5"]
+    ):
+        missing_requirements.append("Missing prohibitive legal language")
 
     # 5. Reasoning & Routing Logic
     # Capped at 3 hops for Digital Sustainability (Nuvolos Core Optimization)
