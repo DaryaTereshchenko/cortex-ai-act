@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="CORTEX-RAG | Regulatory Compliance Dashboard",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # API base URL
@@ -23,43 +23,116 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api")
 st.markdown(
     """
     <style>
-    .main-header {
-        font-size: 2.5rem;
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"]  {
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+
+    .workspace-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2.4rem;
         font-weight: 700;
-        color: #3B82F6;
+        color: #0F4C81;
         text-align: center;
-        padding: 1rem 0;
+        margin-top: 0.25rem;
+        letter-spacing: 0.02em;
+    }
+
+    .workspace-subtitle {
+        font-size: 0.98rem;
+        color: #4B5563;
+        text-align: center;
+        margin-bottom: 1.35rem;
+    }
+
+    .panel-tag {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #6B7280;
+        margin-bottom: 0.25rem;
+    }
+
+    .panel-shell {
+        background: linear-gradient(180deg, rgba(250,251,255,0.95) 0%, rgba(246,248,252,0.95) 100%);
+        border: 1px solid #D6E0EA;
+        border-radius: 12px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .answer-box {
+        background-color: #EEF6FF;
+        border-left: 4px solid #0F4C81;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0 1rem 0;
+        color: #0B1F33;
+        line-height: 1.55;
+    }
+
+    .citation-box {
+        background-color: #FFF7E6;
+        border-left: 4px solid #D97706;
+        padding: 0.75rem;
+        margin: 0.35rem 0;
+        border-radius: 0.35rem;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        color: #1F2937;
+    }
+
+    .about-card {
+        border: 1px solid #D6E0EA;
+        border-radius: 10px;
+        padding: 0.9rem;
+        background: #FCFDFF;
+        margin-top: 0.25rem;
+    }
+
+    .info-dot {
+        width: 2.1rem;
+        height: 2.1rem;
+        border-radius: 999px;
+        border: 1px solid #BFD2E3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #0F4C81;
+        font-weight: 700;
+        font-size: 1rem;
+        background: #F6FAFF;
+    }
+
+    div[data-testid="stExpander"] > details > summary {
+        font-weight: 600;
+        color: #0F4C81;
+    }
+
+    .control-note {
+        color: #6B7280;
+        font-size: 0.86rem;
+        margin-top: 0.25rem;
+    }
+
+    .main-header {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #0F4C81;
+        text-align: center;
+        padding: 0.75rem 0 0.1rem 0;
     }
     .sub-header {
         font-size: 1rem;
-        color: #9CA3AF;
+        color: #6B7280;
         text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-container {
-        background-color: rgba(59, 130, 246, 0.1);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-        border: 1px solid rgba(59, 130, 246, 0.2);
-    }
-    .answer-box {
-        background-color: rgba(59, 130, 246, 0.1);
-        border-left: 4px solid #3B82F6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-        color: inherit;
-    }
-    .citation-box {
-        background-color: rgba(245, 158, 11, 0.1);
-        border-left: 4px solid #F59E0B;
-        padding: 0.75rem;
-        margin: 0.5rem 0;
-        border-radius: 0.25rem;
-        font-family: monospace;
-        font-size: 0.85rem;
-        color: inherit;
+        margin-bottom: 1.4rem;
     }
     </style>
     """,
@@ -73,221 +146,83 @@ if "query_history" not in st.session_state:
 if "current_query_id" not in st.session_state:
     st.session_state.current_query_id = None
 
-# Header
-st.markdown('<div class="main-header">⚖️ CORTEX-RAG</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="sub-header">Entropy-Driven Regulatory Discovery for EU AI Act & DSA</div>',
-    unsafe_allow_html=True,
-)
+if "latest_result" not in st.session_state:
+    st.session_state.latest_result = None
 
-# Sidebar
-with st.sidebar:
-    st.header("⚙️ Configuration")
+if "query_input" not in st.session_state:
+    st.session_state.query_input = ""
 
-    regulation = st.selectbox(
-        "Regulation Scope",
-        options=["eu_ai_act", "dsa", "both"],
-        format_func=lambda x: {
-            "eu_ai_act": "🇪🇺 EU AI Act Only",
-            "dsa": "📱 DSA Only",
-            "both": "🔗 Both Regulations",
-        }[x],
-    )
 
-    max_hops = st.slider(
-        "Max Graph Traversal Hops",
-        min_value=1,
-        max_value=5,
-        value=3,
-        help="Maximum depth for graph traversal in reasoning",
-    )
-
-    enable_pruning = st.checkbox(
-        "Enable Semantic Entropy Pruning",
-        value=True,
-        help="Reduce context by filtering low-information paths",
-    )
-
-    enable_self_correction = st.checkbox(
-        "Enable Agentic Self-Correction",
-        value=True,
-        help="Use critic agent to verify and re-retrieve context",
-    )
-
-    st.divider()
-
-    # System health
-    st.subheader("🏥 System Health")
+def get_system_health() -> dict:
+    """Return service health status for drawer indicators."""
+    status = {
+        "api": False,
+        "reasoning_engine_available": False,
+        "knowledge_graph_available": False,
+        "error": "",
+    }
     try:
-        health_response = requests.get(f"{API_BASE_URL}/health", timeout=5)
-        if health_response.status_code == 200:
-            health = health_response.json()
-            if health.get("reasoning_engine_available"):
-                st.success("✅ Reasoning Engine")
-            else:
-                st.warning("⚠️ Reasoning Engine")
-
-            if health.get("knowledge_graph_available"):
-                st.success("✅ Knowledge Graph")
-            else:
-                st.warning("⚠️ Knowledge Graph")
+        response = requests.get(f"{API_BASE_URL}/health", timeout=5)
+        status["api"] = response.status_code == 200
+        if response.status_code == 200:
+            payload = response.json()
+            status["reasoning_engine_available"] = bool(
+                payload.get("reasoning_engine_available")
+            )
+            status["knowledge_graph_available"] = bool(
+                payload.get("knowledge_graph_available")
+            )
         else:
-            st.error("❌ API Unavailable")
-    except Exception:
-        st.error("❌ API Unreachable")
+            status["error"] = f"API unavailable ({response.status_code})"
+    except Exception as exc:
+        status["error"] = str(exc)
+    return status
 
-# Main tabs
-query_tab, browse_tab, history_tab, about_tab = st.tabs(
-    ["🔍 Query", "📖 Browse", "📜 History", "i About"]
-)
 
-with query_tab:
-    st.subheader("Ask a Regulatory Compliance Question")
+def submit_query(question: str, payload: dict) -> dict | None:
+    """Submit query and poll until completed/failed/timeout."""
+    response = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=12)
+    if response.status_code != 200:
+        st.error(f"API Error: {response.status_code}")
+        return None
 
-    with st.expander("💡 Example Questions"):
-        st.markdown("""
-            - What are the obligations for providers of high-risk AI systems?
-            - How does the AI Act's transparency requirement overlap with DSA?
-            - What is the definition of 'systemic risk' in both regulations?
-            - Which AI systems are explicitly prohibited under Article 5?
-            - What are the conformity assessment procedures?
-            """)
+    query_id = response.json().get("query_id")
+    if not query_id:
+        st.error("Query submission failed: missing query id")
+        return None
 
-    user_question = st.text_area(
-        "Your Question",
-        height=100,
-        placeholder="e.g., What obligations does the EU AI Act impose on deployers of high-risk AI systems?",
-    )
+    st.session_state.current_query_id = query_id
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
-    col1, col2 = st.columns(2)
+    max_attempts = 120
+    for attempt in range(max_attempts):
+        result_response = requests.get(f"{API_BASE_URL}/query/{query_id}", timeout=12)
+        result = result_response.json()
 
-    with col1:
-        submit_button = st.button("🚀 Submit Query", type="primary", use_container_width=True)
+        if result.get("status") == "completed":
+            progress_bar.progress(100)
+            status_text.success("Query completed")
+            return result
 
-    with col2:
-        clear_button = st.button("🗑️ Clear", use_container_width=True)
+        if result.get("status") == "failed":
+            st.error(f"Query failed: {result.get('error', 'Unknown error')}")
+            return None
 
-    if clear_button:
-        st.rerun()
+        progress = min((attempt / max_attempts) * 100, 92)
+        progress_bar.progress(int(progress) / 100)
+        status_text.info(
+            f"Processing... step {len(result.get('reasoning_steps', []))}"
+        )
+        time.sleep(1)
 
-    if submit_button and user_question:
-        with st.spinner("🧠 CORTEX is thinking..."):
-            payload = {
-                "question": user_question,
-                "regulation": regulation,
-                "max_hops": max_hops,
-                "enable_pruning": enable_pruning,
-                "enable_self_correction": enable_self_correction,
-            }
+    st.warning("Query timeout")
+    return None
 
-            try:
-                # Submit query
-                submit_response = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=10)
 
-                if submit_response.status_code == 200:
-                    query_id = submit_response.json()["query_id"]
-                    st.session_state.current_query_id = query_id
-
-                    # Poll for results
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-
-                    max_attempts = 120  # 120 seconds timeout
-                    for attempt in range(max_attempts):
-                        result_response = requests.get(f"{API_BASE_URL}/query/{query_id}")
-                        result = result_response.json()
-
-                        if result["status"] == "completed":
-                            progress_bar.progress(100)
-                            status_text.success("✅ Query completed!")
-                            st.session_state.query_history.insert(0, result)
-
-                            # Display results
-                            st.divider()
-
-                            # Answer
-                            st.subheader("📄 Answer")
-                            st.markdown(
-                                f'<div class="answer-box">{result.get("final_answer", "No answer generated")}</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                            # Citations
-                            if result.get("citations"):
-                                st.subheader("📚 Citations")
-                                for citation in result["citations"]:
-                                    st.markdown(
-                                        f'<div class="citation-box">{citation}</div>',
-                                        unsafe_allow_html=True,
-                                    )
-
-                            # Metrics
-                            metrics = result.get("metrics", {})
-                            col1, col2, col3, col4 = st.columns(4)
-
-                            with col1:
-                                st.metric(
-                                    "Reasoning Steps",
-                                    len(result.get("reasoning_steps", [])),
-                                )
-
-                            with col2:
-                                reduction = metrics.get("entropy_reduction", 0)
-                                st.metric(
-                                    "Context Reduction",
-                                    f"{reduction:.1%}" if reduction else "N/A",
-                                )
-
-                            with col3:
-                                tokens = metrics.get("tokens_saved", 0)
-                                st.metric("Tokens Saved", f"{tokens:,}" if tokens else "N/A")
-
-                            with col4:
-                                latency = metrics.get("latency_seconds", 0)
-                                st.metric("Latency", f"{latency:.2f}s" if latency else "N/A")
-
-                            # Reasoning trace
-                            if result.get("reasoning_steps"):
-                                st.subheader("🔄 Reasoning Trace")
-                                for step in result["reasoning_steps"]:
-                                    with st.container(border=True):
-                                        col1, col2 = st.columns([3, 1])
-                                        with col1:
-                                            st.write(
-                                                f"**Step {step['step_number']}: {step['agent']}**"
-                                            )
-                                            st.write(step["action"])
-                                        with col2:
-                                            if step.get("entropy_reduction"):
-                                                st.metric(
-                                                    "Reduction",
-                                                    f"{step['entropy_reduction']:.1%}",
-                                                )
-
-                            break
-
-                        elif result["status"] == "failed":
-                            st.error(f"❌ Query failed: {result.get('error', 'Unknown error')}")
-                            break
-
-                        else:
-                            progress = min((attempt / max_attempts) * 100, 90)
-                            progress_bar.progress(int(progress) / 100)
-                            status_text.info(
-                                f"⏳ Processing... (step {len(result.get('reasoning_steps', []))})"
-                            )
-                            time.sleep(1)
-                    else:
-                        st.warning("⚠️ Query timeout.")
-
-                else:
-                    st.error(f"API Error: {submit_response.status_code}")
-
-            except Exception as e:
-                st.error(f"Request failed: {e!s}")
-
-with browse_tab:
-    st.subheader("📖 Browse Regulations")
+def render_browse_panel() -> None:
+    """Browse legal corpus content in the left panel."""
+    st.subheader("Browse Regulations")
 
     browse_section = st.selectbox(
         "Select Section",
@@ -299,6 +234,7 @@ with browse_tab:
             "Recitals",
             "Annexes",
         ],
+        key="browse_section",
     )
 
     try:
@@ -312,13 +248,17 @@ with browse_tab:
                 st.error("Failed to load regulations")
 
         elif browse_section == "Articles":
-            col1, col2 = st.columns(2)
-            with col1:
-                reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
-            with col2:
-                article_num = st.number_input("Article Number:", min_value=1, max_value=200)
+            b1, b2 = st.columns(2)
+            with b1:
+                reg_select = st.selectbox(
+                    "Select Regulation:", ["eu_ai_act", "dsa"], key="browse_art_reg"
+                )
+            with b2:
+                article_num = st.number_input(
+                    "Article Number:", min_value=1, max_value=200, key="browse_art_no"
+                )
 
-            if st.button("📄 Load Article"):
+            if st.button("Load Article", key="browse_art_btn"):
                 response = requests.get(
                     f"{API_BASE_URL}/article/{reg_select}/{int(article_num)}",
                     timeout=10,
@@ -330,18 +270,20 @@ with browse_tab:
                     if article.get("children"):
                         st.write("**Sub-sections:**")
                         for child in article["children"]:
-                            st.write(f"  - {child.get('title', child.get('id'))}")
+                            st.write(f"- {child.get('title', child.get('id'))}")
                 else:
                     st.error(f"Article not found (Status: {response.status_code})")
 
         elif browse_section == "Chapters":
-            col1, col2 = st.columns(2)
-            with col1:
-                reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
-            with col2:
-                chapter_num = st.text_input("Chapter Number:")
+            b1, b2 = st.columns(2)
+            with b1:
+                reg_select = st.selectbox(
+                    "Select Regulation:", ["eu_ai_act", "dsa"], key="browse_ch_reg"
+                )
+            with b2:
+                chapter_num = st.text_input("Chapter Number:", key="browse_ch_no")
 
-            if st.button("📚 Load Chapter") and chapter_num:
+            if st.button("Load Chapter", key="browse_ch_btn") and chapter_num:
                 response = requests.get(
                     f"{API_BASE_URL}/chapter/{reg_select}/{chapter_num}", timeout=10
                 )
@@ -352,13 +294,15 @@ with browse_tab:
                         st.write("**Articles in Chapter:**")
                         for child in chapter["children"]:
                             st.write(
-                                f"  - Article {child.get('number')}: {child.get('title', 'N/A')}"
+                                f"- Article {child.get('number')}: {child.get('title', 'N/A')}"
                             )
                 else:
                     st.error(f"Chapter not found (Status: {response.status_code})")
 
         elif browse_section == "Definitions":
-            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+            reg_select = st.selectbox(
+                "Select Regulation:", ["eu_ai_act", "dsa"], key="browse_def_reg"
+            )
 
             response = requests.get(f"{API_BASE_URL}/definitions/{reg_select}", timeout=10)
             if response.status_code == 200:
@@ -369,7 +313,9 @@ with browse_tab:
                 st.error("Failed to load definitions")
 
         elif browse_section == "Recitals":
-            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+            reg_select = st.selectbox(
+                "Select Regulation:", ["eu_ai_act", "dsa"], key="browse_rec_reg"
+            )
 
             response = requests.get(f"{API_BASE_URL}/recitals/{reg_select}", timeout=10)
             if response.status_code == 200:
@@ -382,7 +328,9 @@ with browse_tab:
                 st.error("Failed to load recitals")
 
         elif browse_section == "Annexes":
-            reg_select = st.selectbox("Select Regulation:", ["eu_ai_act", "dsa"])
+            reg_select = st.selectbox(
+                "Select Regulation:", ["eu_ai_act", "dsa"], key="browse_ann_reg"
+            )
 
             response = requests.get(f"{API_BASE_URL}/annexes/{reg_select}", timeout=10)
             if response.status_code == 200:
@@ -392,53 +340,226 @@ with browse_tab:
             else:
                 st.error("Failed to load annexes")
 
-    except Exception as e:
-        st.error(f"Error: {e!s}")
+    except Exception as exc:
+        st.error(f"Error: {exc!s}")
 
-with history_tab:
-    st.subheader("Query History")
+# Header
+top_left, _top_right = st.columns([1, 18])
+with top_left:
+    with st.popover("ⓘ", help="About CORTEX-RAG"):
+        st.markdown("### About CORTEX-RAG")
+        st.markdown(
+            """
+            <div class="about-card">
+            <strong>CORTEX-RAG</strong> is a high-precision regulatory discovery system for the EU AI Act and DSA.
+            <br/><br/>
+            <strong>Core capabilities</strong>: graph-guided retrieval, semantic entropy pruning, and agentic self-correction.
+            <br/><br/>
+            <strong>Stack</strong>: Streamlit, FastAPI, Neo4j, and containerized deployment.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    if not st.session_state.query_history:
-        st.info("No queries yet. Submit a question in the Query tab!")
-    else:
-        for _idx, query in enumerate(st.session_state.query_history):
-            with st.expander(f"🕐 {query['question'][:70]:s}..."):
-                st.write(f"**Status:** {query['status']}")
-                st.write(f"**Time:** {query.get('timestamp', 'N/A')}")
-                if query.get("final_answer"):
-                    st.write(f"**Answer Preview:** {query['final_answer'][:150]}...")
+st.markdown('<div class="workspace-title">⚖️ CORTEX-RAG</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="workspace-subtitle">Entropy-Driven Regulatory Discovery for EU AI Act & DSA</div>',
+    unsafe_allow_html=True,
+)
 
-with about_tab:
-    st.markdown("""
-        ## About CORTEX-RAG
+# Two-panel workspace (left: question/browse, right: answer/history)
+left_panel, right_panel = st.columns([1, 1], gap="large")
 
-        **CORTEX-RAG** is a High-Precision Regulatory Discovery System for navigating
-        the **EU AI Act** and **Digital Services Act (DSA)**.
+with left_panel:
+    st.markdown('<div class="panel-tag">Question Space</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        left_tabs = st.tabs(["🔍 Query", "📖 Browse"])
 
-        ### Key Innovations
+        with left_tabs[0]:
+            st.subheader("Ask a Regulatory Compliance Question")
 
-        💡 **GraphRAG Architecture** — Navigate legal dependencies through a Neo4j knowledge graph
+            with st.expander("💡 Example Questions"):
+                st.markdown(
+                    """
+                - What are the obligations for providers of high-risk AI systems?
+                - How does the AI Act's transparency requirement overlap with DSA?
+                - What is the definition of 'systemic risk' in both regulations?
+                - Which AI systems are explicitly prohibited under Article 5?
+                - What are the conformity assessment procedures?
+                """
+                )
 
-        🔍 **Semantic Entropy Pruning** — Reduce context by ~50% without sacrificing accuracy
+            user_question = st.text_area(
+                "Your Question",
+                height=180,
+                key="query_input",
+                placeholder="e.g., What obligations does the EU AI Act impose on deployers of high-risk AI systems?",
+            )
 
-        🤖 **Agentic Self-Correction** — Verify and re-retrieve context in real-time
+            q1, q2 = st.columns(2)
+            with q1:
+                submit_button = st.button(
+                    "🚀 Submit Query", type="primary", use_container_width=True
+                )
+            with q2:
+                clear_button = st.button("🗑️ Clear", use_container_width=True)
 
-        ### Technical Stack
+            if clear_button:
+                st.session_state.query_input = ""
+                st.rerun()
 
-        - **LLM:** Llama 3.1 8B
-        - **Graph DB:** Neo4j
-        - **Frontend:** Streamlit
-        - **API:** FastAPI
-        - **Infrastructure:** Docker + Nuvelos
+            if submit_button:
+                if not user_question.strip():
+                    st.warning("Please enter a question before submitting.")
+                else:
+                    payload = {
+                        "question": user_question.strip(),
+                        "regulation": st.session_state.get("cfg_regulation", "eu_ai_act"),
+                        "max_hops": st.session_state.get("cfg_max_hops", 3),
+                        "enable_pruning": st.session_state.get("cfg_pruning", True),
+                        "enable_self_correction": st.session_state.get("cfg_self_correct", True),
+                    }
+                    try:
+                        with st.spinner("CORTEX is reasoning over the graph..."):
+                            result = submit_query(user_question.strip(), payload)
+                        if result:
+                            st.session_state.latest_result = result
+                            st.session_state.query_history.insert(0, result)
+                            st.success("Answer ready in the right panel.")
+                    except Exception as exc:
+                        st.error(f"Request failed: {exc!s}")
 
-        ### Team
+        with left_tabs[1]:
+            render_browse_panel()
 
-        - Data Architect: Knowledge Graph Engineering
-        - LLM Engineer: Reasoning Engine & Entropy Pruning
-        - Full-Stack Developer: Web UI & API Gateway
-        - Systems Lead: Deployment & Benchmarking
+with right_panel:
+    st.markdown('<div class="panel-tag">Answer Space</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        right_tabs = st.tabs(["📄 Answer", "📜 History"])
 
-        ---
+        with right_tabs[0]:
+            latest = st.session_state.latest_result
+            if not latest:
+                st.info("Submit a query on the left panel to view answer details here.")
+            else:
+                st.subheader("Answer")
+                st.caption(f"Question: {latest.get('question', 'N/A')}")
+                st.markdown(
+                    f'<div class="answer-box">{latest.get("final_answer", "No answer generated")}</div>',
+                    unsafe_allow_html=True,
+                )
 
-        *Built with ⚡ for digital sustainability and regulatory compliance*
-        """)
+                if latest.get("citations"):
+                    st.markdown("**Citations**")
+                    for citation in latest["citations"]:
+                        st.markdown(
+                            f'<div class="citation-box">{citation}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                metrics = latest.get("metrics", {})
+                m1, m2, m3, m4 = st.columns(4)
+                with m1:
+                    st.metric("Reasoning Steps", len(latest.get("reasoning_steps", [])))
+                with m2:
+                    reduction = metrics.get("entropy_reduction", 0)
+                    st.metric(
+                        "Context Reduction",
+                        f"{reduction:.1%}" if reduction else "N/A",
+                    )
+                with m3:
+                    tokens = metrics.get("tokens_saved", 0)
+                    st.metric("Tokens Saved", f"{tokens:,}" if tokens else "N/A")
+                with m4:
+                    latency = metrics.get("latency_seconds", 0)
+                    st.metric("Latency", f"{latency:.2f}s" if latency else "N/A")
+
+                with st.expander("▼ Reasoning Trace", expanded=False):
+                    reasoning_steps = latest.get("reasoning_steps", [])
+                    if not reasoning_steps:
+                        st.caption("No reasoning trace available for this answer.")
+                    for step in reasoning_steps:
+                        with st.container(border=True):
+                            r1, r2 = st.columns([3, 1])
+                            with r1:
+                                st.write(f"**Step {step['step_number']}: {step['agent']}**")
+                                st.write(step.get("action", ""))
+                            with r2:
+                                if step.get("entropy_reduction"):
+                                    st.metric("Reduction", f"{step['entropy_reduction']:.1%}")
+
+        with right_tabs[1]:
+            st.subheader("Query History")
+            if not st.session_state.query_history:
+                st.info("No queries yet. Submit a question on the left panel.")
+            else:
+                for query in st.session_state.query_history:
+                    title = query.get("question", "Untitled query")[:70]
+                    with st.expander(f"🕐 {title}..."):
+                        st.write(f"**Status:** {query.get('status', 'N/A')}")
+                        st.write(f"**Time:** {query.get('timestamp', 'N/A')}")
+                        if query.get("final_answer"):
+                            st.write(f"**Answer Preview:** {query['final_answer'][:180]}...")
+
+# Bottom collapsible drawer for controls and health (default minimized)
+st.divider()
+with st.expander("▲ Open Controls Drawer", expanded=False):
+    st.markdown(
+        '<div class="control-note">This section is minimized by default. Expand when needed to tune query behavior.</div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2 = st.columns([2, 1], gap="large")
+
+    with c1:
+        st.subheader("⚙️ Query Controls")
+        st.selectbox(
+            "Regulation Scope",
+            options=["eu_ai_act", "dsa", "both"],
+            key="cfg_regulation",
+            format_func=lambda x: {
+                "eu_ai_act": "🇪🇺 EU AI Act Only",
+                "dsa": "📱 DSA Only",
+                "both": "🔗 Both Regulations",
+            }[x],
+        )
+        st.slider(
+            "Max Graph Traversal Hops",
+            min_value=1,
+            max_value=5,
+            value=3,
+            key="cfg_max_hops",
+            help="Maximum depth for graph traversal in reasoning",
+        )
+        st.checkbox(
+            "Enable Semantic Entropy Pruning",
+            value=True,
+            key="cfg_pruning",
+            help="Reduce context by filtering low-information paths",
+        )
+        st.checkbox(
+            "Enable Agentic Self-Correction",
+            value=True,
+            key="cfg_self_correct",
+            help="Use critic agent to verify and re-retrieve context",
+        )
+
+    with c2:
+        st.subheader("🏥 System Health")
+        health = get_system_health()
+        if health["api"]:
+            st.success("✅ API Gateway")
+        else:
+            st.error("❌ API Gateway")
+
+        if health["reasoning_engine_available"]:
+            st.success("✅ Reasoning Engine")
+        else:
+            st.warning("⚠️ Reasoning Engine")
+
+        if health["knowledge_graph_available"]:
+            st.success("✅ Knowledge Graph")
+        else:
+            st.warning("⚠️ Knowledge Graph")
+
+        if health["error"] and not health["api"]:
+            st.caption(f"Health error: {health['error']}")
