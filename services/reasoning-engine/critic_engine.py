@@ -2,6 +2,7 @@ from engine_schema import GraphState
 
 # --- INNOVATION 2: STRUCTURAL AUDIT & AGENTIC SELF-CORRECTION (Graph-Aware) ---
 
+
 def critic_node(state: GraphState) -> GraphState:
     """
     Innovation 2: Structural Audit
@@ -50,7 +51,9 @@ def critic_node(state: GraphState) -> GraphState:
         state["reasoning_trace"].append(msg)
     else:
         state["is_accurate"] = True
-        state["reasoning_trace"].append("Critic: Legal-Graph coverage verified for final synthesis.")
+        state["reasoning_trace"].append(
+            "Critic: Legal-Graph coverage verified for final synthesis."
+        )
 
     return state
 

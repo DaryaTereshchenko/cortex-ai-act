@@ -23,7 +23,7 @@ query_store: dict[str, QueryResponse] = {}
 
 # Service URLs from environment
 REASONING_ENGINE_URL = "http://127.0.0.1:8002"
-#REASONING_ENGINE_URL = os.getenv("REASONING_ENGINE_URL", "http://localhost:8002")
+# REASONING_ENGINE_URL = os.getenv("REASONING_ENGINE_URL", "http://localhost:8002")
 KNOWLEDGE_GRAPH_URL = os.getenv("KNOWLEDGE_GRAPH_URL", "http://localhost:8001")
 
 

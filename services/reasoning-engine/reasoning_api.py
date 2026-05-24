@@ -18,9 +18,11 @@ class ReasonRequest(BaseModel):
     pruning_threshold: float = 0.45
     kg_hits: list = []
 
+
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
 
 @app.post("/api/reason")
 async def reason(request: ReasonRequest):
@@ -52,6 +54,7 @@ async def reason(request: ReasonRequest):
 
 
 # --- FOR NAIVE RAG ---
+
 
 @app.post("/api/naive")
 async def naive_synthesis(request: ReasonRequest):
