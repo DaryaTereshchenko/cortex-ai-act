@@ -52,18 +52,19 @@ services:
     restart: unless-stopped
     ports:
       - "${KG_PORT:-8001}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *common-env
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URI: ${NEO4J_URI:-bolt://host.docker.internal:7687}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       NEO4J_DATABASE: ${NEO4J_DATABASE:-neo4j}
-    depends_on:
-      neo4j:
-        condition: service_healthy
+      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
     volumes:
       - ./services/knowledge-graph:/app
-      - kg_cache:/app/.cache
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
+      - ${SENTENCE_TRANSFORMERS_HOME:-~/.cache/torch/sentence_transformers}:/app/.cache/sentence_transformers
     networks:
       - cortex-net
 
@@ -78,19 +79,21 @@ services:
     restart: unless-stopped
     ports:
       - "${RE_PORT:-8002}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *common-env
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URI: ${NEO4J_URI:-bolt://host.docker.internal:7687}
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       HF_HOME: /app/.cache/huggingface
-      MODEL_ID: ${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}
-    depends_on:
-      neo4j:
-        condition: service_healthy
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      SENTENCE_TRANSFORMERS_HOME: ""
+      MODEL_ID: ${MODEL_ID:-llama3.1:8b}
     volumes:
       - ./services/reasoning-engine:/app
-      - model_cache:/app/.cache
+      - ${HF_HOME:-~/.cache/huggingface}:/app/.cache/huggingface
     networks:
       - cortex-net
     # Uncomment for GPU support (requires NVIDIA Container Toolkit)
@@ -133,8 +136,8 @@ services:
     container_name: cortex-web-ui
     restart: unless-stopped
     ports:
-      - "${UI_PORT:-8501}:8501"    # Streamlit
-      - "${API_PORT:-8000}:8000"   # FastAPI
+      - "${UI_PORT:-8505}:8501"    # Streamlit
+      - "${API_PORT:-8085}:8000"   # FastAPI
     environment:
       <<: *common-env
       REASONING_ENGINE_URL: http://reasoning-engine:8000
@@ -198,15 +201,41 @@ services:
     networks:
       - cortex-net
 
+  # ===========================================================================
+  # 7. OLLAMA  —  Local LLM inference server
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cortex-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cortex-net
+    # Uncomment for GPU support (requires NVIDIA Container Toolkit)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 # =============================================================================
 # Volumes & Networks
 # =============================================================================
 volumes:
   neo4j_data:
   neo4j_logs:
-  kg_cache:
-  model_cache:
   bench_results:
+  ollama_models:
 
 networks:
   cortex-net:

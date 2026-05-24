@@ -1,0 +1,2 @@
+model,model_display,avg_doc_accuracy,std_doc_accuracy,avg_article_accuracy,std_article_accuracy,avg_doc_hit,std_doc_hit,avg_article_hit,std_article_hit,avg_paragraph_hit,std_paragraph_hit
+Judge,Judge,0.68,0.4676467334823194,0.09766666666666665,0.1367131196218627,0.68,0.4676467334823194,0.455,0.49922049790412065,0.295,0.4571871613491707

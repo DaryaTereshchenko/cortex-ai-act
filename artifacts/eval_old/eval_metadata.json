@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-04-04T03:19:45.804793+00:00",
+  "input_file": "EU AI and DSA Compliance Dataset.xlsx",
+  "total_questions": 200,
+  "models_evaluated": [
+    "advanced",
+    "bm25",
+    "cortex",
+    "dense",
+    "judge",
+    "naive"
+  ],
+  "embedding_model": "all-MiniLM-L6-v2",
+  "judge_rag": {
+    "retrieval_model": "llama3.1:8b",
+    "generation_model": "llama3.1:8b",
+    "judge_model": "phi4:latest",
+    "ollama_base_url": "http://localhost:11434"
+  },
+  "cortex": {
+    "api_base_url": "http://localhost:8000/api",
+    "pruning_threshold": 0.45
+  },
+  "neo4j_uri": "bolt://localhost:7687"
+}

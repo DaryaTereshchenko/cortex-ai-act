@@ -1,0 +1,7 @@
+model,model_display,avg_Precision,avg_Recall,avg_EM,avg_F1,avg_Token_Efficiency_Ratio,avg_Context_Tokens,avg_LLM_Score,avg_LLM_Relevance,avg_LLM_Faithfulness,avg_LLM_Completeness,avg_LLM_Precision,avg_Attempts,avg_Retrieval_Similarity,uncertainty_distribution
+Naive,Naive (Neo4j full-text lexical baseline),0.0,0.0,0.0,0.0,,2669.17,,,,,,,,
+BM25,BM25 (rank_bm25 lexical baseline),0.122,0.237760101010101,0.0,0.0,1.2149231054543135,3064.715,,,,,,,,
+Dense,Dense Embedding (all-MiniLM-L6-v2 semantic retrieval baseline),0.106,0.2048568376068376,0.0,0.0,0.8721328062374921,2104.9,,,,,,,,
+Advanced,"Advanced RAG (CORTEX pipeline; pruning=off, critic=off)",0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,
+Cortex,"Cortex Main (CORTEX pipeline; pruning=on, critic=on)",0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,
+Judge,Judge,0.07329166666666667,0.2546813186813187,0.0,0.19639931250927425,0.9511854845496192,2202.66,8.2525,8.76,8.155,6.795,9.39,1.17,0.5294330226667225,"{""low"": 143, ""medium"": 50, ""high"": 7}"

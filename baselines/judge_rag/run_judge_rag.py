@@ -60,13 +60,13 @@ def parse_args() -> argparse.Namespace:
     # Ollama models — any model name available on the local Ollama server
     p.add_argument(
         "--retrieval-model",
-        default="phi4:latest",
-        help="Ollama model for query rewriting (default: phi4:latest)",
+        default="llama3.1:8b",
+        help="Ollama model for query rewriting (default: llama3.1:8b)",
     )
     p.add_argument(
         "--generation-model",
-        default="phi4:latest",
-        help="Ollama model for answer generation (default: phi4:latest)",
+        default="llama3.1:8b",
+        help="Ollama model for answer generation (default: llama3.1:8b)",
     )
     p.add_argument(
         "--judge-model",
@@ -98,8 +98,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--embedding-model",
-        default="all-MiniLM-L6-v2",
-        help="Sentence-transformers model for re-ranking (default: all-MiniLM-L6-v2)",
+        default="BAAI/bge-small-en-v1.5",
+        help="Sentence-transformers model for re-ranking (default: BAAI/bge-small-en-v1.5)",
     )
 
     # Query rewriting

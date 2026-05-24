@@ -1,0 +1,4 @@
+model,model_display,avg_doc_accuracy,std_doc_accuracy,avg_article_accuracy,std_article_accuracy,avg_doc_hit,std_doc_hit,avg_article_hit,std_article_hit,avg_paragraph_hit,std_paragraph_hit
+Naive,Naive (Neo4j full-text lexical baseline),0.8889999999999999,0.20119991807944623,0.17099999999999999,0.073388893221258,1.0,0.0,0.85,0.3579674615346874,0.0,0.0
+BM25,BM25 (rank_bm25 lexical baseline),0.877,0.18774247303395286,0.16299999999999998,0.08039475469776977,1.0,0.0,0.81,0.3932853503935417,0.0,0.0
+Dense,Dense Embedding (BAAI/bge-small-en-v1.5 semantic retrieval baseline),0.9280000000000002,0.15919394953276078,0.16399999999999998,0.07703030794244915,1.0,0.0,0.82,0.3851515397122457,0.0,0.0

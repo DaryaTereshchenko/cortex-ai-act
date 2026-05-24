@@ -312,7 +312,7 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434"
 # extraction on a laptop GPU like the RTX 4070 (12 GB).  Alternatives:
 #   gemma3:4b   - faster, slightly lower quality
 #   llama3.1:8b - similar quality, slightly more VRAM
-DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
+DEFAULT_OLLAMA_MODEL = "llama3.1:8b"
 
 
 class OllamaSummariser:

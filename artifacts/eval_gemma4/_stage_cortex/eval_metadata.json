@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-04-18T23:49:51.603926+00:00",
+  "input_file": "EU AI and DSA Compliance Dataset.xlsx",
+  "total_questions": 200,
+  "models_evaluated": [
+    "advanced",
+    "cortex",
+    "cortex-critic-only",
+    "cortex-pruner-only"
+  ],
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "dense_legal_model": null,
+  "cortex_embedding_model": "BAAI/bge-small-en-v1.5",
+  "judge_embedding_model": null,
+  "judge_rag": {
+    "retrieval_model": "llama3.1:8b",
+    "generation_model": "gemma4:latest",
+    "judge_model": "gemma3:latest",
+    "ollama_base_url": "http://localhost:11434"
+  },
+  "cortex": {
+    "pruning_threshold": 0.45,
+    "synthesis_model": "gemma4:latest"
+  },
+  "neo4j_uri": "bolt://localhost:7687",
+  "metric_groups": [
+    "retrieval_source_metrics.csv",
+    "retrieval_text_metrics.csv",
+    "retrieval_mcq_metrics.csv",
+    "retrieval_id_metrics.csv",
+    "generator_metrics.csv",
+    "efficiency_metrics.csv",
+    "summary_metrics.csv",
+    "significance_tests.csv"
+  ]
+}
