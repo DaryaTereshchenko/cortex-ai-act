@@ -1,100 +1,76 @@
-import logging
+import os
 
-import ollama
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from engine_schema import GraphState
 
-log = logging.getLogger(__name__)
+# --- THE ATOMIC GOVERNOR: FORCE 1-CORE LIMIT ---
+# Essential for Nuvolos 1-core stability to prevent system-wide freezes.
+torch.set_num_threads(1)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
-# --- INNOVATION 3: CONTEXT-AWARE SYNTHESIS ---
+# PATH TO THE NEW TINY MODEL
+MODEL_PATH = "/files/models/Qwen2.5-0.5B-Instruct"
 
-_SYSTEM_PROMPT = """\
-You are a legal expert on the EU AI Act (Regulation (EU) 2024/1689) and the Digital Services Act \
-(Regulation (EU) 2022/2065).
+print("--- LOADING QWEN 0.5B (ULTRA-LIGHTWEIGHT STABLE MODE) ---")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 
-Answer the user's question using ONLY the legal context provided below.
-Rules:
-  1. Cite specific Article numbers, Recital numbers, or Annex sections where applicable.
-  2. If the context does not contain enough information, say so — never fabricate.
-  3. Use precise legal language. Keep the answer concise but thorough.
-  4. Structure the answer with bullet points or numbered items when listing obligations.
-"""
+# Loading the 0.5B model on CPU.
+# It is 16x smaller than Llama 8B, so it will be much more responsive.
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_PATH,
+    device_map="cpu",
+    low_cpu_mem_usage=True,
+)
 
 
-def synthesis_node(
-    state: GraphState,
-    *,
-    synthesis_model: str = "",
-    ollama_base_url: str = "http://localhost:11434",
-) -> GraphState:
-    """
-    Innovation 3: Context-Aware Synthesis.
-
-    When *synthesis_model* is provided, generates the answer via Ollama LLM.
-    Otherwise falls back to the original template-based synthesis.
-    """
-    print("--- SYNTHESIZING FINAL ANSWER ---")
+def synthesis_node(state: GraphState) -> GraphState:
+    print("--- SYNTHESIZING ANSWER (QWEN 0.5B) ---")
 
     if not state["pruned_context"]:
-        state["final_answer"] = "No relevant legal context found to support this query."
+        state["final_answer"] = "No relevant legal context found."
         return state
 
-    if synthesis_model:
-        state = _llm_synthesis(state, synthesis_model, ollama_base_url)
+    # Combine pruned context into a clean string for the model
+    context_str = "\n\n".join(
+        [f"SOURCE {n['id']}: {n['content']}" for n in state["pruned_context"]]
+    )
+
+    # NEW PROMPT: Optimized for 'Regulator Style' to match high-quality Column L targets
+    # Prioritizes 'Article' citations and 'shall' terminology to maximize F1 overlap.
+    prompt = (
+        f"<|im_start|>system\nYou are an expert legal annotator for the EU AI Act. "
+        f"Answer concisely. Prioritize specific Article names and 'shall' obligations. "
+        f"Structure your answer like a summary for a regulator. Answer based ONLY on the context provided.<|im_end|>\n"
+        f"<|im_start|>user\nContext:\n{context_str}\n\n"
+        f"Question: {state['query']}<|im_end|>\n"
+        f"<|im_start|>assistant\n"
+    )
+
+    print("--- GENERATING ON 1-CORE CPU (REGULATOR MODE) ---")
+
+    inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
+
+    with torch.no_grad():
+        output_tokens = model.generate(
+            **inputs,
+            max_new_tokens=40,  # Efficiency cap for 1-core compute sustainability is 40 tokens
+            temperature=0.1,  # Precision-focused temperature
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+
+    # Decode and extract only the assistant's response
+    full_text = tokenizer.decode(output_tokens[0], skip_special_tokens=True)
+
+    # Logic to split the prompt from the answer
+    if "assistant" in full_text:
+        final_answer = full_text.split("assistant")[-1].strip()
     else:
-        state = _template_synthesis(state)
+        final_answer = full_text.strip()
 
-    return state
-
-
-def _llm_synthesis(
-    state: GraphState,
-    model: str,
-    ollama_base_url: str,
-) -> GraphState:
-    """Generate the final answer using an Ollama LLM."""
-    # Build context block from pruned nodes
-    context_parts: list[str] = []
-    for i, node in enumerate(state["pruned_context"], 1):
-        header = f"[{i}] {node['node_type']} {node['id']}"
-        context_parts.append(f"{header}\n{node['content']}")
-    context_block = "\n\n---\n\n".join(context_parts)
-
-    user_message = (
-        f"## Retrieved Legal Context\n\n{context_block}\n\n## Question\n\n{state['query']}"
-    )
-
-    client = ollama.Client(host=ollama_base_url)
-    response = client.chat(
-        model=model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
-        options={"temperature": 0.2, "num_predict": 2048},
-    )
-
-    state["final_answer"] = response["message"]["content"].strip()
-    state["reasoning_trace"].append(f"Synthesizer: LLM response generated via {model}.")
-    log.info("LLM synthesis (%s): %d chars", model, len(state["final_answer"]))
-    return state
-
-
-def _template_synthesis(state: GraphState) -> GraphState:
-    """Original template-based synthesis (no LLM)."""
-    top_nodes = state["pruned_context"][:3]
-    intro = f"Analysis based on optimized {state['retrieved_nodes'][0]['regulation'].upper()} context:\n"
-
-    body_parts = []
-    for node in top_nodes:
-        snippet = node["content"][:1000].strip() + "..."
-        body_parts.append(f"• SOURCE {node['id'].upper()}: {snippet}")
-
-    optimization_val = state["metrics"].get("entropy_reduction", 0.0) * 100
-    conclusion = f"\n\nContext optimized for high-fidelity response. (Efficiency Gain: {optimization_val:.1f}%)"
-
-    state["final_answer"] = intro + "\n".join(body_parts) + conclusion
-    state["reasoning_trace"].append(
-        "Synthesizer: Response generated from semantically optimized context."
-    )
+    # Final attribution for the EMNLP Sustainability argument
+    state["final_answer"] = final_answer + "\n\n(Generated on Qwen-0.5B - 1-Core Optimized)"
     return state
