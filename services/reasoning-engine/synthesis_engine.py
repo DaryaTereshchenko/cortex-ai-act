@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -12,18 +13,27 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 # PATH TO THE NEW TINY MODEL
-MODEL_PATH = "/files/models/Qwen2.5-0.5B-Instruct"
+MODEL_PATH = os.getenv("MODEL_PATH", "/files/models/Qwen2.5-0.5B-Instruct")
+MODEL_ID_FALLBACK = os.getenv("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct")
 
 print("--- LOADING QWEN 0.5B (ULTRA-LIGHTWEIGHT STABLE MODE) ---")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 
-# Loading the 0.5B model on CPU.
-# It is 16x smaller than Llama 8B, so it will be much more responsive.
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_PATH,
-    device_map="cpu",
-    low_cpu_mem_usage=True,
-)
+tokenizer = None
+model = None
+_model_source = MODEL_PATH if Path(MODEL_PATH).exists() else MODEL_ID_FALLBACK
+
+try:
+    tokenizer = AutoTokenizer.from_pretrained(_model_source)
+    # Loading the 0.5B model on CPU.
+    # It is 16x smaller than Llama 8B, so it will be much more responsive.
+    model = AutoModelForCausalLM.from_pretrained(
+        _model_source,
+        device_map="cpu",
+        low_cpu_mem_usage=True,
+    )
+except Exception as e:
+    print(f"⚠️ Model load failed for '{_model_source}': {e}")
+    print("⚠️ Falling back to lightweight template synthesis mode.")
 
 
 def synthesis_node(state: GraphState) -> GraphState:
@@ -31,6 +41,11 @@ def synthesis_node(state: GraphState) -> GraphState:
 
     if not state["pruned_context"]:
         state["final_answer"] = "No relevant legal context found."
+        return state
+
+    if model is None or tokenizer is None:
+        snippets = [f"SOURCE {n['id']}: {n['content'][:280]}" for n in state["pruned_context"][:3]]
+        state["final_answer"] = "\n".join(snippets) + "\n\n(Template fallback: model unavailable)"
         return state
 
     # Combine pruned context into a clean string for the model
