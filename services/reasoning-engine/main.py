@@ -6,9 +6,6 @@ import os
 
 from fastapi import FastAPI
 
-from reasoning_api import ReasonRequest
-from reasoning_api import reason as reason_handler
-
 app = FastAPI(
     title="CORTEX Reasoning Engine",
     description="LLM-powered reasoning with Entropy Pruning and Self-Correction Loop",
@@ -26,10 +23,5 @@ async def root() -> dict:
     return {
         "service": "reasoning-engine",
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "model_id": os.getenv("MODEL_ID", "llama3.1:8b"),
+        "model_id": os.getenv("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct"),
     }
-
-
-@app.post("/api/reason")
-async def api_reason(request: ReasonRequest):
-    return await reason_handler(request)
